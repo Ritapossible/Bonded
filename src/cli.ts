@@ -24,6 +24,8 @@ import { StateProvider } from "./engine/state-provider.js";
 import { TradingEngine } from "./engine/trading-engine.js";
 import { createMcpServer, startMcpServer } from "./mcp/server.js";
 import { createLogger, type Logger } from "./observability/logger.js";
+import { ActivityFeed } from "./console/activity.js";
+import { ConsoleServer } from "./console/server.js";
 import { AuthorisationIndex } from "./reconcile/authorisation-index.js";
 import { PollingOrderSource, UserDataStreamSource } from "./reconcile/order-source.js";
 import { Reconciler } from "./reconcile/reconciler.js";
@@ -133,6 +135,7 @@ async function main(): Promise<number> {
   // authorisation, the reconciler revokes scope on a finding. A late-bound holder
   // rather than a mutual import, which would be a dependency cycle.
   const wiring: { engine?: TradingEngine } = {};
+  const feed = new ActivityFeed();
 
   const reconciler = new Reconciler({
     index,
@@ -141,6 +144,7 @@ async function main(): Promise<number> {
     clock: systemClock,
     logger,
     onFinding: (finding) => {
+      feed.recordFinding(finding);
       wiring.engine?.revokeScope(
         `${finding.outcome}: ${finding.explanation} (${finding.reference.symbol} order ${String(finding.reference.orderId)})`,
       );
@@ -158,6 +162,7 @@ async function main(): Promise<number> {
     runtimeEnv: config.value.binance.env,
     onDecision: (record) => {
       reconciler.authorise(record);
+      feed.recordDecision(record);
     },
   });
   wiring.engine = engine;
@@ -197,12 +202,38 @@ async function main(): Promise<number> {
   });
   emit(`  [INFO] userDataStream      connecting to ${config.value.binance.streamUrl}`);
 
+  // The console is a display, not a safety component: if it cannot bind, BONDED says
+  // so and keeps trading. A broken screen must never take the gate down with it.
+  const consoleServer =
+    config.value.consolePort === 0
+      ? undefined
+      : new ConsoleServer({
+          port: config.value.consolePort,
+          logger,
+          engine,
+          reconciler,
+          feed,
+          orderSources: [stream, poller],
+          env: config.value.binance.env,
+          startedAtMs: systemClock.now(),
+        });
+
+  if (consoleServer !== undefined) {
+    const bound = await consoleServer.start();
+    emit(
+      bound
+        ? `  [PASS] console             http://127.0.0.1:${String(config.value.consolePort)}`
+        : `  [WARN] console             port ${String(config.value.consolePort)} unavailable; continuing without it`,
+    );
+  }
+
   const server = createMcpServer({ engine, logger, version: VERSION });
 
   // Flush the audit log before exiting. A record that never reached disk is a record
   // reconciliation will later read as a bypass.
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, "shutting down");
+    await consoleServer?.stop();
     await stream.stop();
     await poller.stop();
     await decisionLog.value.close();

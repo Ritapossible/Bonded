@@ -206,6 +206,19 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 | **A keepalive failure marks the source unhealthy** | An expired listen key stops delivering events *without closing the socket* — silent blindness is the failure mode this guards against |
 | **The engine publishes decisions via a callback** | The reconciler calls back into `revokeScope`; a mutual import would be a cycle. The CLI wires both ends through a holder object |
 
+## 3d. Console decisions
+
+| Decision | Reasoning |
+| --- | --- |
+| **Loopback only, read-only, no credentials** | The payload carries balances, order history and mandate thresholds. Binding `0.0.0.0` would open a worse hole than the one BONDED closes; refusing every non-`GET` means a compromised tab cannot become a trading capability |
+| **The console shows thresholds; the agent's view does not** | The owner wrote the mandate — hiding it from them is theatre. An agent that can read its limits can sit exactly inside them |
+| **No framework, no build step, no external requests** | It has to work offline on a machine being recorded, with nothing to install and nothing to fail on camera |
+| **`textContent`, never `innerHTML`** | The feed renders exchange-supplied strings such as client order ids. Treating those as markup is an injection path onto the operator's screen |
+| **SSE, pushed on activity *and* on a timer** | Activity alone would miss source-health changes; a timer alone would delay a bond burn |
+| **A failed bind is a warning, not fatal** | A broken display must never take the gate down |
+| **`closeAllConnections()` on shutdown** | Found by a test: `close()` alone waits indefinitely on keep-alive sockets, so shutdown hung once the console had ever been opened, and pooled clients were handed a dying socket |
+| **The activity feed is a bounded display buffer, not the audit trail** | The decision log on disk is authoritative. Keeping that explicit stops a display concern quietly becoming safety-critical |
+
 ## 4. Dead ends — do not re-litigate
 
 | Idea | Why it was dropped |

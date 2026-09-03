@@ -68,6 +68,8 @@ const EnvSchema = z.object({
   BONDED_MANDATE_PATH: z.string().min(1).default("./data/mandate.json"),
   BONDED_DECISION_LOG_PATH: z.string().min(1).default("./data/decisions.jsonl"),
   BONDED_LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  /** Owner console port. 0 disables it. Always bound to loopback. */
+  BONDED_CONSOLE_PORT: z.coerce.number().int().min(0).max(65_535).default(7391),
   BONDED_HTTP_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(10_000),
   BONDED_RECV_WINDOW_MS: z.coerce.number().int().min(1_000).max(60_000).default(5_000),
 });
@@ -88,6 +90,7 @@ export interface Config {
   readonly decisionLogPath: string;
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly pollIntervalMs: number;
+  readonly consolePort: number;
 }
 
 /**
@@ -127,6 +130,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Result<Conf
     decisionLogPath: env.BONDED_DECISION_LOG_PATH,
     logLevel: env.BONDED_LOG_LEVEL,
     pollIntervalMs: env.BONDED_POLL_INTERVAL_MS,
+    consolePort: env.BONDED_CONSOLE_PORT,
   });
 }
 
@@ -140,6 +144,7 @@ export function describeConfig(config: Config): Record<string, unknown> {
     mandatePath: config.mandatePath,
     decisionLogPath: config.decisionLogPath,
     logLevel: config.logLevel,
+    consolePort: config.consolePort,
     timeoutMs: config.binance.timeoutMs,
     recvWindowMs: config.binance.recvWindowMs,
   };

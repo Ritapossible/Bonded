@@ -80,9 +80,25 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Boot guards + startup banner | done |
 | **Reconciler — authorisation index, classification, bond burn** | **done** |
 | Order sources — polling backstop + user data stream | done |
-| Owner console | not started |
+| Owner console — one screen, live over SSE | done |
 
-96 tests passing (unit, property, integration), typecheck and lint clean.
+109 tests passing (unit, property, integration), typecheck and lint clean.
+
+### The console
+
+![BONDED console showing a burned bond](docs/console.png)
+
+One screen at `http://127.0.0.1:7391`, pushed over SSE. The bond state is the largest
+thing on it and changes colour, so it reads on mute. `TESTNET` is permanently visible.
+
+Its security posture is deliberate and tested: **loopback only** (never `0.0.0.0` — the
+payload includes balances and order history), **read-only** (every method but `GET` is
+refused, so a compromised browser tab cannot become a trading capability), and no
+credential ever reaches the view model.
+
+One difference from the agent's view: the console **does** show the mandate's thresholds.
+The owner wrote them; hiding them would be theatre. `get_mandate_summary` still omits
+them, because an agent that can read its limits can sit exactly inside them.
 
 ## Documents
 
@@ -141,11 +157,15 @@ To connect an agent:
 claude mcp add bonded -- node /path/to/bonded/dist/cli.js
 ```
 
+To preview the console UI without credentials — **synthetic data, not a demo of the
+system** — run `node scripts/console-preview.mjs`. The real demo is
+`tests/integration/bypass-detection.test.ts`.
+
 ### Development
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 96 tests, ~1.4s
+npm test           # 109 tests, ~1.4s
 ```
 
 ## Licence
