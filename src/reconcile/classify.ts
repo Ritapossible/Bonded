@@ -121,7 +121,11 @@ function parameterMismatches(order: ObservedOrder, authorisation: Authorisation)
   if (expected.quantity !== undefined && !equal(order.origQty, expected.quantity)) {
     mismatches.push(`quantity: authorised ${expected.quantity}, executed ${order.origQty}`);
   }
-  if (expected.price !== undefined && priceIsComparable(order) && !equal(order.price, expected.price)) {
+  if (
+    expected.price !== undefined &&
+    priceIsComparable(order) &&
+    !equal(order.price, expected.price)
+  ) {
     mismatches.push(`price: authorised ${expected.price}, executed ${order.price}`);
   }
   return mismatches;

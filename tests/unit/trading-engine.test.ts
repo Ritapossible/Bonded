@@ -194,9 +194,7 @@ describe("TradingEngine", () => {
 
     // The id BONDED minted is the one that actually went to the exchange.
     expect(exchange.orderRequests).toHaveLength(1);
-    expect(exchange.orderRequests[0]!.url).toContain(
-      `newClientOrderId=${outcome.clientOrderId}`,
-    );
+    expect(exchange.orderRequests[0]!.url).toContain(`newClientOrderId=${outcome.clientOrderId}`);
   });
 
   it("denies an oversized order and never contacts the exchange", async () => {

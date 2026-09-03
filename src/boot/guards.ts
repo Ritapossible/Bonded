@@ -140,7 +140,11 @@ async function guardDecisionLog(ctx: GuardContext): Promise<GuardResult> {
   if (!verified.ok) {
     // A missing file is a legitimate first run, not a broken chain.
     if (verified.error.code === ErrorCode.DECISION_LOG_MISSING) {
-      return { name: "decisionLog", status: "PASS", detail: "no existing log; starting at genesis" };
+      return {
+        name: "decisionLog",
+        status: "PASS",
+        detail: "no existing log; starting at genesis",
+      };
     }
     return { name: "decisionLog", status: "FAIL", detail: verified.error.message };
   }
@@ -181,7 +185,11 @@ async function guardClockSkew(ctx: GuardContext): Promise<GuardResult> {
       detail: `local clock differs from the exchange by ${String(skew)} ms (limit ${String(MAX_CLOCK_SKEW_MS)} ms)`,
     };
   }
-  return { name: "clockSkew", status: "PASS", detail: `clock within ${String(skew)} ms of exchange` };
+  return {
+    name: "clockSkew",
+    status: "PASS",
+    detail: `clock within ${String(skew)} ms of exchange`,
+  };
 }
 
 /**
@@ -215,8 +223,6 @@ export function anyGuardFailed(results: readonly GuardResult[]): boolean {
 export function formatGuardBanner(results: readonly GuardResult[]): string {
   const symbol: Record<GuardStatus, string> = { PASS: "PASS", WARN: "WARN", FAIL: "FAIL" };
   const width = Math.max(...results.map((r) => r.name.length));
-  const lines = results.map(
-    (r) => `  [${symbol[r.status]}] ${r.name.padEnd(width)}  ${r.detail}`,
-  );
+  const lines = results.map((r) => `  [${symbol[r.status]}] ${r.name.padEnd(width)}  ${r.detail}`);
   return ["BONDED boot guards", ...lines].join("\n");
 }

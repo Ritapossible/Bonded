@@ -113,7 +113,9 @@ async function main(): Promise<number> {
     emit(`  [FAIL] symbolGrounding  not listed on the exchange: ${missing.join(", ")}`);
     return 1;
   }
-  emit(`  [PASS] symbolGrounding  ${String(grounded.value.size)} symbols resolved from exchangeInfo`);
+  emit(
+    `  [PASS] symbolGrounding  ${String(grounded.value.size)} symbols resolved from exchangeInfo`,
+  );
 
   const decisionLog = await DecisionLog.open(config.value.decisionLogPath);
   if (!decisionLog.ok) {

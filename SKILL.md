@@ -11,10 +11,10 @@ description: |
   Every order returns either PLACED with a stamped client order id, or DENIED naming the
   exact mandate clause it breached. Do NOT use this skill to decide *what* to trade — it
   enforces limits, it does not produce strategies or signals.
+version: 0.1.0
+license: MIT
 metadata:
   author: Ritapossible
-  version: "0.1.0"
-license: MIT
 ---
 
 # BONDED

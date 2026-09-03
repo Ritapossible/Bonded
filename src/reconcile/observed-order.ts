@@ -115,7 +115,9 @@ export function parseExecutionReport(raw: unknown): Result<ObservedOrder, Bonded
 /** Normalise a `GET /api/v3/allOrders` array. */
 export function parseAllOrders(raw: unknown): Result<ObservedOrder[], BondedError> {
   if (!Array.isArray(raw)) {
-    return err(bondedError(ErrorCode.EXCHANGE_MALFORMED_RESPONSE, "allOrders did not return an array"));
+    return err(
+      bondedError(ErrorCode.EXCHANGE_MALFORMED_RESPONSE, "allOrders did not return an array"),
+    );
   }
   const orders: ObservedOrder[] = [];
   for (const entry of raw) {

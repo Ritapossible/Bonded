@@ -106,7 +106,12 @@ describe("gate", () => {
 
   it("denies a symbol outside the allowlist without disclosing the allowlist", () => {
     const denial = expectDeny(
-      evaluate(input({ intent: { ...LIMIT_BUY, symbol: "BTCUSDT" }, mandate: mandate({ symbols: ["ETHUSDT"] }) })),
+      evaluate(
+        input({
+          intent: { ...LIMIT_BUY, symbol: "BTCUSDT" },
+          mandate: mandate({ symbols: ["ETHUSDT"] }),
+        }),
+      ),
       ClauseId.SYMBOL_ALLOWLIST,
     );
     expect(denial.limit).toBe("1 allowed symbols");
@@ -115,7 +120,10 @@ describe("gate", () => {
 
   it("denies a symbol that is not currently trading", () => {
     const halted = new Map([["ETHUSDT", { ...ETH_RULES, status: "HALT" }]]);
-    expectDeny(evaluate(input({ state: state({ symbolRules: halted }) })), ClauseId.SYMBOL_TRADABLE);
+    expectDeny(
+      evaluate(input({ state: state({ symbolRules: halted }) })),
+      ClauseId.SYMBOL_TRADABLE,
+    );
   });
 
   it("denies an order type the mandate does not permit", () => {

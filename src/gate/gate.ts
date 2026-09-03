@@ -396,7 +396,9 @@ function formatMinute(minute: number): string {
  * order there is no exact answer before execution, so a live reference price is used —
  * and if one is not available, or is stale, the order is denied rather than estimated.
  */
-function deriveNotional(input: GateInput): { ok: true; value: DecimalString } | { ok: false; verdict: Verdict } {
+function deriveNotional(
+  input: GateInput,
+): { ok: true; value: DecimalString } | { ok: false; verdict: Verdict } {
   const { intent, state, nowMs } = input;
 
   if (intent.kind === "LIMIT") {

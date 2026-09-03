@@ -1,0 +1,7 @@
+# Markdown is hand-wrapped for readability. Prettier pads table cells to a common width,
+# which turns a one-cell edit into a whole-table diff, and rewrites emphasis markers.
+# `npm run format` should leave prose alone.
+*.md
+dist/
+coverage/
+node_modules/

@@ -215,7 +215,7 @@ export class UserDataStreamSource implements OrderSource {
   }
 
   get healthy(): boolean {
-    return this.#socket?.readyState === 1 /* OPEN */;
+    return this.#socket?.readyState === 1; /* OPEN */
   }
 
   async start(onOrders: OrderHandler): Promise<void> {

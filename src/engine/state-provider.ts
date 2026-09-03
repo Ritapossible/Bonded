@@ -49,7 +49,9 @@ export class StateProvider {
   readonly #symbols: readonly string[];
 
   #symbolRules: Map<string, SymbolRules> = new Map();
-  #account: Cached<{ canTrade: boolean; balances: ReadonlyMap<string, string>; openOrderCount: number }> | undefined;
+  #account:
+    | Cached<{ canTrade: boolean; balances: ReadonlyMap<string, string>; openOrderCount: number }>
+    | undefined;
   #prices: Cached<ReadonlyMap<string, string>> | undefined;
   /** In-flight refreshes, so concurrent orders share one round trip. */
   #inFlight = new Map<string, Promise<unknown>>();
@@ -147,10 +149,16 @@ export class StateProvider {
    */
   async snapshot(): Promise<ExchangeState> {
     const tasks: Promise<unknown>[] = [];
-    if (this.#account === undefined || !this.#isFresh(this.#account.observedAtMs, STALENESS_BUDGET_MS.account)) {
+    if (
+      this.#account === undefined ||
+      !this.#isFresh(this.#account.observedAtMs, STALENESS_BUDGET_MS.account)
+    ) {
       tasks.push(this.#refreshAccount());
     }
-    if (this.#prices === undefined || !this.#isFresh(this.#prices.observedAtMs, STALENESS_BUDGET_MS.prices)) {
+    if (
+      this.#prices === undefined ||
+      !this.#isFresh(this.#prices.observedAtMs, STALENESS_BUDGET_MS.prices)
+    ) {
       tasks.push(this.#refreshPrices());
     }
     await Promise.all(tasks);

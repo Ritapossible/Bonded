@@ -72,9 +72,7 @@ function malformed(what: string, issues: z.ZodIssue[]): BondedError {
  * Binance itself disables one — not skipped, because a missing entry would make the
  * gate deny every order for that symbol as ungrounded.
  */
-export function parseExchangeInfo(
-  raw: unknown,
-): Result<Map<string, SymbolRules>, BondedError> {
+export function parseExchangeInfo(raw: unknown): Result<Map<string, SymbolRules>, BondedError> {
   const parsed = ExchangeInfoSchema.safeParse(raw);
   if (!parsed.success) return err(malformed("exchangeInfo", parsed.error.issues));
 

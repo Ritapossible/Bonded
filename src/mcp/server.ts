@@ -79,7 +79,9 @@ type OrderArgs = {
  * malformed request is answered with a usage error instead of consuming a decision-log
  * sequence number.
  */
-function toIntent(args: OrderArgs): { ok: true; intent: OrderIntent } | { ok: false; message: string } {
+function toIntent(
+  args: OrderArgs,
+): { ok: true; intent: OrderIntent } | { ok: false; message: string } {
   const symbol = args.symbol.toUpperCase();
 
   if (args.type === "LIMIT") {
@@ -92,7 +94,13 @@ function toIntent(args: OrderArgs): { ok: true; intent: OrderIntent } | { ok: fa
     if (!price.ok) return { ok: false, message: price.error.message };
     return {
       ok: true,
-      intent: { kind: "LIMIT", symbol, side: args.side, quantity: quantity.value, price: price.value },
+      intent: {
+        kind: "LIMIT",
+        symbol,
+        side: args.side,
+        quantity: quantity.value,
+        price: price.value,
+      },
     };
   }
 
@@ -113,7 +121,10 @@ function toIntent(args: OrderArgs): { ok: true; intent: OrderIntent } | { ok: fa
   }
   const quantity = parsePositiveDecimal(args.quantity, "quantity");
   if (!quantity.ok) return { ok: false, message: quantity.error.message };
-  return { ok: true, intent: { kind: "MARKET_BASE", symbol, side: args.side, quantity: quantity.value } };
+  return {
+    ok: true,
+    intent: { kind: "MARKET_BASE", symbol, side: args.side, quantity: quantity.value },
+  };
 }
 
 export function createMcpServer(options: McpServerOptions): McpServer {

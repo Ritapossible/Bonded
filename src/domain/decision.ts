@@ -48,8 +48,7 @@ export interface Denial {
 }
 
 export type Verdict =
-  | { readonly outcome: "ALLOW" }
-  | { readonly outcome: "DENY"; readonly denial: Denial };
+  { readonly outcome: "ALLOW" } | { readonly outcome: "DENY"; readonly denial: Denial };
 
 export const ALLOW: Verdict = { outcome: "ALLOW" };
 

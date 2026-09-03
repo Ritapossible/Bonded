@@ -46,10 +46,7 @@ export function mapOk<T, U, E>(r: Result<T, E>, f: (value: T) => U): Result<U, E
 }
 
 /** Chain a fallible step onto a success, short-circuiting on error. */
-export function andThen<T, U, E>(
-  r: Result<T, E>,
-  f: (value: T) => Result<U, E>,
-): Result<U, E> {
+export function andThen<T, U, E>(r: Result<T, E>, f: (value: T) => Result<U, E>): Result<U, E> {
   return r.ok ? f(r.value) : r;
 }
 

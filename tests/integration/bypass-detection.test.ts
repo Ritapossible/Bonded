@@ -78,7 +78,9 @@ class StubExchange {
   #nextOrderId = 28461170;
 
   readonly fetch: typeof fetch = (input, init) => {
-    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = new URL(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     const method = init?.method ?? "GET";
     const json = (payload: unknown, status = 200): Promise<Response> =>
       Promise.resolve(
@@ -98,7 +100,12 @@ class StubExchange {
               baseAsset: "ETH",
               quoteAsset: "USDT",
               filters: [
-                { filterType: "PRICE_FILTER", minPrice: "0.01", maxPrice: "1000000", tickSize: "0.01" },
+                {
+                  filterType: "PRICE_FILTER",
+                  minPrice: "0.01",
+                  maxPrice: "1000000",
+                  tickSize: "0.01",
+                },
                 { filterType: "LOT_SIZE", minQty: "0.0001", maxQty: "9000", stepSize: "0.0001" },
                 { filterType: "NOTIONAL", minNotional: "5" },
               ],
@@ -130,7 +137,9 @@ class StubExchange {
     }
   };
 
-  #append(partial: Pick<ExchangeOrder, "clientOrderId" | "side" | "type" | "price" | "origQty">): ExchangeOrder {
+  #append(
+    partial: Pick<ExchangeOrder, "clientOrderId" | "side" | "type" | "price" | "origQty">,
+  ): ExchangeOrder {
     const order: ExchangeOrder = {
       symbol: "ETHUSDT",
       orderId: this.#nextOrderId++,

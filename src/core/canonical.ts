@@ -75,10 +75,7 @@ function serialize(value: unknown, path: string): Result<string, BondedError> {
       if (!Number.isFinite(value)) return err(unsupported("number is not finite", path));
       if (!Number.isInteger(value)) {
         return err(
-          unsupported(
-            "non-integer number: represent fractional values as decimal strings",
-            path,
-          ),
+          unsupported("non-integer number: represent fractional values as decimal strings", path),
         );
       }
       if (!Number.isSafeInteger(value)) {
