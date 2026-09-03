@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+*.log
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+profiles/
+
+# runtime state
+data/
+*.jsonl
