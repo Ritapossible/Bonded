@@ -142,6 +142,16 @@ covers the logic; only the real round trip is blocked.
 Incidental confirmation that fail-closed works: the unreachable exchange produced a
 `FAIL` on the clock-skew guard and a refusal to start, rather than a silent degrade.
 
+### Skills Hub frontmatter: the README and the code disagree
+
+The hub's contribution guide says a `SKILL.md` starts with `title:`. **Every skill actually
+in the tree uses `name:`** — `square-post`, `query-token-audit`, `academy-skill`,
+`binance-agentic-wallet`, all of them. `metadata` carries `author` and `version`; `license`
+is optional and inconsistently present.
+
+BONDED's `SKILL.md` follows the code, not the doc. Worth mentioning in the PR — it is a
+small, real contribution beyond the skill itself.
+
 ### Skills Hub mechanics
 
 [binance/binance-skills-hub](https://github.com/binance/binance-skills-hub) — 19 skills, split
@@ -241,6 +251,7 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 | 3 | Do user data streams work on Spot Testnet? | The reconciler | **Resolved — yes** (§2) |
 | 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | **Decided — direct REST.** The gate needs to control the exact query string it signs and to stamp `newClientOrderId` per order; shelling out to a CLI puts a process boundary in the hot path for no gain. `binance-cli` stays the documented way to *demonstrate a bypass* |
 | 6 | Live testnet round trip | The demo | **Blocked in the cloud sandbox** (geo-block, §2). Must be run locally |
+| 8 | Will the hub accept a skill that is not a Binance-operated service? | Distribution | Open — every current skill is first-party. Worth opening the PR regardless; a rejection costs nothing and the repo link stands on its own |
 | 7 | Does the listen-key flow work on Spot Testnet with HMAC keys? | Real-time detection | **Untested** — geo-blocked here. The polling backstop covers the audit path either way, so a failure degrades the demo from instant to ~15s rather than breaking it. **Verify locally first** |
 | 5 | What is already published on Binance Skills Hub's listing UI? | Competitive picture | **Unresolved** — `binance.com/en/skills` could not be loaded through this sandbox's proxy on three attempts. **Check manually** |
 

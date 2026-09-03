@@ -55,15 +55,68 @@ Anything but the first burns the bond and revokes trade scope. Every finding shi
 plain explanation, the verbatim evidence, a Binance order id anyone can check independently,
 and an explicit list of what could **not** be determined.
 
-## What it does not do
+## Honest limits
 
-- **It is not a TEE and not a ZK circuit.** The bound rests on key custody. Compromise the
-  BONDED host and the bound is gone.
-- **It audits compliance, not quality.** It cannot tell you a trade was unwise.
-- **Reconciliation detects; it does not prevent.** A bypass order fills before BONDED sees it.
-  The guarantee is deterrence plus attribution, not prevention.
-- **It does not stop withdrawals** — because it never needs to. That is enforced one layer
-  below, at the exchange, and BONDED refuses to boot unless it is.
+Every one of these is a real weakness. They are here rather than buried because a security
+design that does not name its own limits has not been examined, and because each is
+something a careful reader would find in ten minutes anyway.
+
+### The bound rests on key custody
+
+BONDED is **not a TEE and not a ZK circuit**. It holds the Binance credential and the agent
+does not, which is what makes the bound structural rather than advisory — but compromise the
+machine BONDED runs on and the bound is gone. On the ladder of enforcement mechanisms this
+is the middle rung: a signed mandate with a public trace. The rungs above it need attested
+hardware or a ZK-native chain, and neither was reachable here.
+
+### Reconciliation detects; it does not prevent
+
+A bypass order reaches the exchange and fills **before** BONDED sees it. What BONDED
+guarantees is that it will not go unnoticed: the order is attributed, the bond burns, and
+scope is revoked so nothing further can be placed through the gate. Deterrence plus
+attribution, not prevention. Every `FOREIGN` finding says exactly this in its own
+uncertainty list, on screen, in the demo.
+
+### It audits compliance, not quality
+
+The gate can prove an order was inside the mandate. It has no opinion on whether the trade
+was sensible, and it cannot acquire one. An agent that loses money strictly within its
+limits is a mandate problem, not a BONDED problem.
+
+### The withdrawal guarantee is not verified on testnet
+
+BONDED does not implement a withdrawal guard — it verifies the exchange enforces one, which
+is stronger, because that guarantee survives BONDED being wrong about everything else. But
+`GET /sapi/v1/account/apiRestrictions` does not exist on Spot Testnet, so on testnet the
+guard reports `WARN` and states that it asserted `BINANCE_API_ENV=testnet` instead. It does
+not report a pass it did not earn.
+
+### The gate is only as good as the mandate
+
+A mandate that compiles to weaker rules than the owner intended fails silently — nothing
+downstream can detect the difference between "permitted" and "permitted by mistake". The
+mitigations are human: clauses render as numbered text before anything runs, and an
+unrecognised clause name is a hard error rather than an ignored key.
+
+### Testnet fills are not real fills
+
+Testnet liquidity does not resemble production. No PnL figure produced here means anything,
+and none is presented as if it does.
+
+### The user data stream is a single point of failure
+
+A dropped socket blinds real-time detection. The polling backstop is a hard startup
+dependency for exactly this reason — no audit path, no trading — but a mid-session stream
+loss degrades detection from near-instant to one polling interval until it reconnects.
+
+### What has not been exercised against a live exchange
+
+Development ran in an environment Binance geo-blocks, so **the live testnet round trip has
+not been run** — signing, order placement and the user data stream are covered by tests
+against a stubbed exchange, not by a real one. The listen-key flow in particular is
+unverified: it is used deliberately, because `userDataStream.subscribe` requires
+`session.logon` and therefore Ed25519 keys that Spot Testnet does not issue, but whether it
+behaves as documented is an open question recorded in [MEMORY.md](./MEMORY.md).
 
 ## Status
 
@@ -107,6 +160,7 @@ them, because an agent that can read its limits can sit exactly inside them.
 | [PLAN.md](./PLAN.md) | Scope, milestones, cut list, demo script, submission checklist |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Three planes, enforcement layers, data flows, invariants |
 | [MEMORY.md](./MEMORY.md) | Verified research, decisions and why, dead ends, open questions |
+| [SKILL.md](./SKILL.md) | Binance Skills Hub package — tool contract, and how an agent should behave when denied |
 
 ## Environment
 

@@ -1,0 +1,154 @@
+---
+name: bonded
+description: |
+  Place Binance Spot orders through a mandate gate that refuses anything outside limits the
+  owner set, and reconciles every executed order against what was actually authorised.
+  Use when an agent needs to trade a Binance account unattended and the owner wants the
+  bound enforced rather than requested — "trade within these limits", "give the agent a
+  spending mandate", "let it trade but cap the size", "audit what my agent traded", "did
+  anything trade that I didn't authorise". Also use when an order was refused and you need
+  the clause that refused it, or when the bond has been burned and trading has stopped.
+  Every order returns either PLACED with a stamped client order id, or DENIED naming the
+  exact mandate clause it breached. Do NOT use this skill to decide *what* to trade — it
+  enforces limits, it does not produce strategies or signals.
+metadata:
+  author: Ritapossible
+  version: "0.1.0"
+license: MIT
+---
+
+# BONDED
+
+**Going around BONDED is possible. Going around it unnoticed is not.**
+
+BONDED sits between an AI agent and a Binance Spot account. The agent holds no Binance
+credential — its entire capability is this skill's tools, so the bound is structural
+rather than advisory. There is no "please don't" to ignore, only tools that refuse.
+
+Repository: <https://github.com/Ritapossible/Bonded>
+
+## When to use it
+
+- An agent should trade a Binance account **unattended**, and the owner wants limits that
+  hold without a human confirming each order.
+- The owner needs to know whether anything traded on the account that BONDED did not
+  authorise.
+- An order was refused and you need to know which clause refused it.
+
+## When not to use it
+
+- **Deciding what to trade.** BONDED enforces limits; it produces no signals, strategies
+  or recommendations. Pair it with whatever decides.
+- **Reading market data.** Use the Binance MCP server or the `binance` skill.
+- **Anything but Spot.** Futures and margin are out of scope in this version.
+
+## Setup
+
+Node 22+. Binance **Spot Testnet** keys from <https://testnet.binance.vision>.
+
+```bash
+git clone https://github.com/Ritapossible/Bonded && cd Bonded
+npm install && npm run build
+
+cp .env.example .env      # fill in BINANCE_API_KEY and BINANCE_SECRET_KEY
+openssl rand -hex 32      # -> BONDED_HMAC_SECRET
+cp examples/mandate.example.json data/mandate.json
+```
+
+Register the MCP server with your agent:
+
+```bash
+claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js
+```
+
+BONDED prints a boot-guard banner to stderr and **refuses to start** if any guard fails —
+wrong environment, expired mandate, broken audit chain, clock skew, or no readable order
+history. A guard that cannot perform its check reports `WARN` and says what it checked
+instead; it never claims a check it did not make.
+
+## Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `place_order` | Submit a Spot order for evaluation. Returns `PLACED`, `DENIED` or `FAILED` |
+| `check_order` | Evaluate an order **without** placing it or consuming an audit entry |
+| `get_mandate_summary` | Mandate hash, expiry, clause **names**, and whether scope is revoked |
+| `get_account` | Balances and open-order count, with the time they were observed |
+
+### Placing an order
+
+```json
+{ "symbol": "ETHUSDT", "side": "BUY", "type": "LIMIT", "quantity": "0.1", "price": "2000" }
+```
+
+A `LIMIT` order needs `quantity` and `price`. A `MARKET` order needs **either** `quantity`
+(base asset) **or** `quoteOrderQty` (quote asset) — never both. All numeric values are
+decimal **strings**, matching Binance's own convention; a float loses precision that a
+limit check depends on.
+
+## How to behave when an order is denied
+
+**A denial is a normal outcome, not an error.** It arrives as a successful tool call:
+
+```json
+{
+  "status": "DENIED",
+  "seq": 412,
+  "clause": "maxNotionalUsd",
+  "clauseText": "Order notional must not exceed the mandate's maximum.",
+  "observed": "900",
+  "limit": "500"
+}
+```
+
+Three rules for an agent reading this:
+
+1. **Do not retry the same order.** The mandate is data; it will not change between
+   attempts. A retry loop burns rate limit and produces nothing.
+2. **Read `clause` and adjust.** The denial names exactly what to change. `observed` and
+   `limit` tell you by how much.
+3. **`clause: "scope"` means stop.** The bond has been burned — an order executed on the
+   account that BONDED never authorised. Every further order will be refused until the
+   owner investigates. Report it to the owner rather than working around it.
+
+Use `check_order` first when you are unsure. It evaluates without placing anything and
+without consuming an audit-log entry.
+
+## What you cannot see
+
+`get_mandate_summary` returns clause **names**, never thresholds. This is deliberate: an
+agent that can read its limits can shape its behaviour to sit exactly inside them, which
+is the behaviour the mandate exists to make visible. You learn the rules by being refused,
+one clause at a time — and each refusal tells you the limit for that clause.
+
+## What BONDED does not protect against
+
+Worth knowing, because overstating it would be worse than not having it:
+
+- **Host compromise.** The bound rests on key custody. Compromise the machine BONDED runs
+  on and the bound is gone. It is not a TEE and not a ZK circuit.
+- **Bad trades inside the mandate.** BONDED audits compliance, not quality. It cannot tell
+  you a permitted trade was unwise.
+- **Preventing a bypass.** Reconciliation *detects*; a bypass order fills before BONDED
+  sees it. The guarantee is deterrence plus attribution, not prevention.
+- **Withdrawals.** Not BONDED's job — that is enforced at the exchange, on the API key
+  itself. BONDED verifies at boot that it is, and refuses to run otherwise.
+
+## Reconciliation
+
+Every order on the account is checked against BONDED's authorisation log, using Binance's
+own order history as the second, independent account. Five outcomes:
+
+| Outcome | Meaning |
+| --- | --- |
+| `AUTHORISED` | Executed exactly as authorised |
+| `MISMATCHED` | Authorised — but not for the order that executed |
+| `FOREIGN` | No BONDED identifier. A plain bypass |
+| `FORGED` | Wears BONDED's namespace without a valid tag |
+| `UNKNOWN_AUTHENTIC` | Valid tag, no matching record. A log-integrity problem |
+
+Anything but the first burns the bond and revokes trade scope. Findings carry a plain
+explanation, the verbatim evidence, a Binance order id checkable independently of BONDED,
+and an explicit list of what could not be determined.
+
+The owner watches this at `http://127.0.0.1:7391` — loopback only, read-only.
