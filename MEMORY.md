@@ -191,6 +191,21 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 | **A denial is a successful tool call, not an MCP error** | An error invites retry loops and buries the reason in a transport failure |
 | **`DECISION_LOG_MISSING` is distinct from `DECISION_LOG_CORRUPT`** | A first run must not look like tampering. Found by a smoke test: the guard was string-matching an error message and failed a clean first start |
 
+## 3c. Reconciler decisions
+
+| Decision | Reasoning |
+| --- | --- |
+| **Five outcomes, not two** | "Authorised or not" loses the distinctions that matter. `FORGED` outranks `FOREIGN` because imitating the authorisation namespace is worse than plainly using the key; `MISMATCHED` and `UNKNOWN_AUTHENTIC` are different problems needing different responses |
+| **Parameter binding, not just id matching** | An authorisation covers *specific* parameters. Without comparing them, altering an order's size between authorisation and placement would pass unnoticed — the id would still verify |
+| **Decimal comparison, not string equality** | Binance pads to 8 decimals; `"0.1"` vs `"0.10000000"` would be a false mismatch on every single order |
+| **Price ignored for market orders** | Binance reports price `0` for them. Comparing it would flag every market order as mismatched |
+| **De-duplicate by exchange order id** | Stream and poll deliberately overlap. Without de-duplication one bypass alerts repeatedly, which is how an alerting channel becomes noise nobody reads |
+| **Index rebuilt from the decision log at startup** | Otherwise every order placed before a restart becomes an apparent bypass |
+| **Listen-key flow, not `userDataStream.subscribe`** | The WebSocket API method needs `session.logon`, which needs **Ed25519** keys. Spot Testnet issues HMAC keys, so the listen-key flow is the one that works. Deliberate, not an oversight |
+| **Polling backstop is a hard startup dependency** | No audit path, no trading. The stream is best-effort on top; its absence is stated, never silently tolerated |
+| **A keepalive failure marks the source unhealthy** | An expired listen key stops delivering events *without closing the socket* — silent blindness is the failure mode this guards against |
+| **The engine publishes decisions via a callback** | The reconciler calls back into `revokeScope`; a mutual import would be a cycle. The CLI wires both ends through a holder object |
+
 ## 4. Dead ends — do not re-litigate
 
 | Idea | Why it was dropped |
@@ -213,6 +228,7 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 | 3 | Do user data streams work on Spot Testnet? | The reconciler | **Resolved — yes** (§2) |
 | 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | **Decided — direct REST.** The gate needs to control the exact query string it signs and to stamp `newClientOrderId` per order; shelling out to a CLI puts a process boundary in the hot path for no gain. `binance-cli` stays the documented way to *demonstrate a bypass* |
 | 6 | Live testnet round trip | The demo | **Blocked in the cloud sandbox** (geo-block, §2). Must be run locally |
+| 7 | Does the listen-key flow work on Spot Testnet with HMAC keys? | Real-time detection | **Untested** — geo-blocked here. The polling backstop covers the audit path either way, so a failure degrades the demo from instant to ~15s rather than breaking it. **Verify locally first** |
 | 5 | What is already published on Binance Skills Hub's listing UI? | Competitive picture | **Unresolved** — `binance.com/en/skills` could not be loaded through this sandbox's proxy on three attempts. **Check manually** |
 
 ---

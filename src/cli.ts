@@ -24,6 +24,9 @@ import { StateProvider } from "./engine/state-provider.js";
 import { TradingEngine } from "./engine/trading-engine.js";
 import { createMcpServer, startMcpServer } from "./mcp/server.js";
 import { createLogger, type Logger } from "./observability/logger.js";
+import { AuthorisationIndex } from "./reconcile/authorisation-index.js";
+import { PollingOrderSource, UserDataStreamSource } from "./reconcile/order-source.js";
+import { Reconciler } from "./reconcile/reconciler.js";
 
 const VERSION = "0.1.0";
 
@@ -116,6 +119,34 @@ async function main(): Promise<number> {
     return 1;
   }
 
+  // Rebuild the authorisation index from the log, so orders placed before a restart
+  // are not mistaken for bypasses.
+  const index = new AuthorisationIndex();
+  const replayed = await index.loadFromLog(config.value.decisionLogPath);
+  if (!replayed.ok) {
+    emit(`  [FAIL] authorisationIndex  ${replayed.error.message}`);
+    return 1;
+  }
+  emit(`  [PASS] authorisationIndex  ${String(replayed.value)} prior authorisations replayed`);
+
+  // The engine and the reconciler refer to each other — the engine publishes each
+  // authorisation, the reconciler revokes scope on a finding. A late-bound holder
+  // rather than a mutual import, which would be a dependency cycle.
+  const wiring: { engine?: TradingEngine } = {};
+
+  const reconciler = new Reconciler({
+    index,
+    hmacSecret: config.value.hmacSecret.expose(),
+    mandateHash: mandate.hash,
+    clock: systemClock,
+    logger,
+    onFinding: (finding) => {
+      wiring.engine?.revokeScope(
+        `${finding.outcome}: ${finding.explanation} (${finding.reference.symbol} order ${String(finding.reference.orderId)})`,
+      );
+    },
+  });
+
   const engine = new TradingEngine({
     mandate,
     client,
@@ -125,7 +156,46 @@ async function main(): Promise<number> {
     clock: systemClock,
     logger,
     runtimeEnv: config.value.binance.env,
+    onDecision: (record) => {
+      reconciler.authorise(record);
+    },
   });
+  wiring.engine = engine;
+
+  // The polling backstop is a hard startup dependency: no audit path, no trading. Its
+  // first pass runs synchronously here, so a failure surfaces as a refusal to start
+  // rather than as silent blindness later.
+  const poller = new PollingOrderSource({
+    client,
+    clock: systemClock,
+    logger,
+    symbols: mandate.spec.symbols,
+    intervalMs: config.value.pollIntervalMs,
+  });
+  await poller.start((orders) => {
+    reconciler.observeAll(orders);
+  });
+  if (!poller.healthy) {
+    emit("  [FAIL] auditPath           could not read order history; refusing to trade blind");
+    return 1;
+  }
+  emit(
+    `  [PASS] auditPath           order history reconciled every ${String(config.value.pollIntervalMs)} ms`,
+  );
+
+  // The stream is what makes detection near-instant. It is best-effort at startup —
+  // the poller already guarantees an audit path — but its absence is stated, never
+  // silently tolerated.
+  const stream = new UserDataStreamSource({
+    client,
+    clock: systemClock,
+    logger,
+    streamBaseUrl: config.value.binance.streamUrl,
+  });
+  await stream.start((orders) => {
+    reconciler.observeAll(orders);
+  });
+  emit(`  [INFO] userDataStream      connecting to ${config.value.binance.streamUrl}`);
 
   const server = createMcpServer({ engine, logger, version: VERSION });
 
@@ -133,6 +203,8 @@ async function main(): Promise<number> {
   // reconciliation will later read as a bypass.
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, "shutting down");
+    await stream.stop();
+    await poller.stop();
     await decisionLog.value.close();
     process.exit(0);
   };
@@ -140,7 +212,10 @@ async function main(): Promise<number> {
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
   await startMcpServer(server, logger);
-  emit(`\nBONDED ready — mandate ${mandate.hash.slice(0, 8)}, ${config.value.binance.env}\n`);
+  emit(
+    `\nBONDED ready — mandate ${mandate.hash.slice(0, 8)}, ${config.value.binance.env}, ` +
+      `${String(index.size)} authorisations indexed\n`,
+  );
   return 0;
 }
 

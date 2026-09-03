@@ -48,11 +48,14 @@ interface BinanceErrorBody {
 }
 
 interface RequestOptions {
-  readonly method: "GET" | "POST" | "DELETE";
+  readonly method: "GET" | "POST" | "PUT" | "DELETE";
   readonly path: string;
   readonly query?: Query;
-  /** SIGNED requests carry an HMAC and a timestamp; PUBLIC ones do not. */
-  readonly security: "PUBLIC" | "SIGNED";
+  /**
+   * PUBLIC — no credential. API_KEY — the key header only, no signature (Binance's
+   * `USER_STREAM` type). SIGNED — key header plus an HMAC over the query string.
+   */
+  readonly security: "PUBLIC" | "API_KEY" | "SIGNED";
   /**
    * Whether an interrupted attempt may be retried. False for anything that creates or
    * cancels an order: the safe response to an ambiguous write is to surface it.
@@ -151,7 +154,9 @@ export class BinanceClient {
     const url = `${this.#baseUrl}${options.path}${queryString === "" ? "" : `?${queryString}`}`;
 
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (signed) headers["X-MBX-APIKEY"] = this.#apiKey.expose();
+    if (signed || options.security === "API_KEY") {
+      headers["X-MBX-APIKEY"] = this.#apiKey.expose();
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -345,6 +350,58 @@ export class BinanceClient {
       query: buildTickerQuery(symbols),
       security: "PUBLIC",
       retryable: true,
+    });
+  }
+
+  // ---- User data stream ----------------------------------------------------
+  //
+  // The listen-key flow. Binance also exposes `userDataStream.subscribe` over the
+  // WebSocket API, but that requires an authenticated session (`session.logon`), which
+  // in turn requires Ed25519 keys — the listen-key flow works with the HMAC keys the
+  // testnet hands out, so it is what BONDED uses. See MEMORY.md.
+
+  /** Open a user data stream and return its listen key. Valid for 60 minutes. */
+  async createListenKey(): Promise<Result<string, BondedError>> {
+    const raw = await this.#request<unknown>({
+      method: "POST",
+      path: "/api/v3/userDataStream",
+      security: "API_KEY",
+      retryable: true,
+    });
+    if (!raw.ok) return raw;
+    const body = raw.value as { listenKey?: unknown };
+    if (typeof body.listenKey !== "string" || body.listenKey === "") {
+      return err(
+        bondedError(ErrorCode.EXCHANGE_MALFORMED_RESPONSE, "userDataStream returned no listenKey"),
+      );
+    }
+    return ok(body.listenKey);
+  }
+
+  /**
+   * Extend a listen key's validity.
+   *
+   * Must be called well inside the 60-minute window. A lapsed key silently stops
+   * delivering events, which would blind the audit path without any error surfacing —
+   * so the caller treats a keepalive failure as a reason to halt, not to continue.
+   */
+  async keepAliveListenKey(listenKey: string): Promise<Result<unknown, BondedError>> {
+    return this.#request({
+      method: "PUT",
+      path: "/api/v3/userDataStream",
+      query: { listenKey },
+      security: "API_KEY",
+      retryable: true,
+    });
+  }
+
+  async closeListenKey(listenKey: string): Promise<Result<unknown, BondedError>> {
+    return this.#request({
+      method: "DELETE",
+      path: "/api/v3/userDataStream",
+      query: { listenKey },
+      security: "API_KEY",
+      retryable: false,
     });
   }
 

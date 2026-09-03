@@ -56,6 +56,11 @@ const EnvSchema = z.object({
   BINANCE_SECRET_KEY: z.string().min(16, "looks too short to be a Binance secret key"),
   BINANCE_API_ENV: z.enum(["testnet", "prod"]).default("testnet"),
   BINANCE_SPOT_BASE_PATH: z.string().url().default("https://testnet.binance.vision"),
+  BINANCE_STREAM_BASE_PATH: z
+    .string()
+    .startsWith("wss://")
+    .default("wss://stream.testnet.binance.vision/ws"),
+  BONDED_POLL_INTERVAL_MS: z.coerce.number().int().min(1_000).max(300_000).default(15_000),
   BONDED_ALLOW_PROD: z.enum(["0", "1"]).default("0"),
   BONDED_HMAC_SECRET: z
     .string()
@@ -73,6 +78,7 @@ export interface Config {
     readonly secretKey: Secret;
     readonly env: "testnet" | "prod";
     readonly baseUrl: string;
+    readonly streamUrl: string;
     readonly timeoutMs: number;
     readonly recvWindowMs: number;
   };
@@ -81,6 +87,7 @@ export interface Config {
   readonly mandatePath: string;
   readonly decisionLogPath: string;
   readonly logLevel: "debug" | "info" | "warn" | "error";
+  readonly pollIntervalMs: number;
 }
 
 /**
@@ -110,6 +117,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Result<Conf
       secretKey: new Secret(env.BINANCE_SECRET_KEY),
       env: env.BINANCE_API_ENV,
       baseUrl: env.BINANCE_SPOT_BASE_PATH.replace(/\/+$/, ""),
+      streamUrl: env.BINANCE_STREAM_BASE_PATH.replace(/\/+$/, ""),
       timeoutMs: env.BONDED_HTTP_TIMEOUT_MS,
       recvWindowMs: env.BONDED_RECV_WINDOW_MS,
     },
@@ -118,6 +126,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Result<Conf
     mandatePath: env.BONDED_MANDATE_PATH,
     decisionLogPath: env.BONDED_DECISION_LOG_PATH,
     logLevel: env.BONDED_LOG_LEVEL,
+    pollIntervalMs: env.BONDED_POLL_INTERVAL_MS,
   });
 }
 
@@ -126,6 +135,7 @@ export function describeConfig(config: Config): Record<string, unknown> {
   return {
     binanceEnv: config.binance.env,
     baseUrl: config.binance.baseUrl,
+    streamUrl: config.binance.streamUrl,
     allowProd: config.allowProd,
     mandatePath: config.mandatePath,
     decisionLogPath: config.decisionLogPath,

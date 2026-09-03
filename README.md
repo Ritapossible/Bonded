@@ -41,6 +41,20 @@ BONDED guards that one.
 Point 3 is the one nobody else has built. A gate is blind to anything that goes around it, so
 BONDED keeps a second, independent account of reality and treats disagreement as the finding.
 
+Five outcomes, and the differences matter:
+
+| Outcome | Meaning |
+| --- | --- |
+| `AUTHORISED` | An order BONDED allowed, executed exactly as authorised |
+| `MISMATCHED` | Authorised — but the order that executed is not the one authorised |
+| `FOREIGN` | No BONDED identifier at all. A plain bypass |
+| `FORGED` | Wears BONDED's namespace without a valid tag — worse than foreign |
+| `UNKNOWN_AUTHENTIC` | Tag verifies, no matching record. A log-integrity problem |
+
+Anything but the first burns the bond and revokes trade scope. Every finding ships with a
+plain explanation, the verbatim evidence, a Binance order id anyone can check independently,
+and an explicit list of what could **not** be determined.
+
 ## What it does not do
 
 - **It is not a TEE and not a ZK circuit.** The bound rests on key custody. Compromise the
@@ -53,8 +67,8 @@ BONDED keeps a second, independent account of reality and treats disagreement as
 
 ## Status
 
-**Day 1 complete.** The gate, the audit log and the MCP surface are implemented and
-tested; the reconciler (Day 3, the differentiator) is not yet built.
+**The reconciler works end to end.** The full sequence — allow, refuse, bypass, detect,
+revoke — is covered by an integration test against a stubbed exchange.
 
 | Component | State |
 | --- | --- |
@@ -64,10 +78,11 @@ tested; the reconciler (Day 3, the differentiator) is not yet built.
 | Binance Spot REST client — signing, timeouts, bounded retries | done |
 | MCP server — `place_order`, `check_order`, `get_mandate_summary`, `get_account` | done |
 | Boot guards + startup banner | done |
-| **Reconciler / bypass detection** | **not started** |
+| **Reconciler — authorisation index, classification, bond burn** | **done** |
+| Order sources — polling backstop + user data stream | done |
 | Owner console | not started |
 
-69 tests passing (unit + property), typecheck and lint clean.
+96 tests passing (unit, property, integration), typecheck and lint clean.
 
 ## Documents
 
@@ -112,6 +127,9 @@ BONDED boot guards
                                Asserted BINANCE_API_ENV=testnet instead
   [PASS] decisionLog           no existing log; starting at genesis
   [PASS] clockSkew             clock within 42 ms of exchange
+  [PASS] symbolGrounding       2 symbols resolved from exchangeInfo
+  [PASS] authorisationIndex    0 prior authorisations replayed
+  [PASS] auditPath             order history reconciled every 15000 ms
 ```
 
 The `WARN` is deliberate. That check cannot be performed on testnet, so the guard says
@@ -127,7 +145,7 @@ claude mcp add bonded -- node /path/to/bonded/dist/cli.js
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 69 tests, ~1s
+npm test           # 96 tests, ~1.4s
 ```
 
 ## Licence

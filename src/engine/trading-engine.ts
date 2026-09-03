@@ -41,6 +41,16 @@ export interface TradingEngineOptions {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly runtimeEnv: "testnet" | "prod";
+  /**
+   * Called with every durably written decision record, before the order is sent.
+   *
+   * The reconciler subscribes here so its authorisation index is populated *before*
+   * an `executionReport` for that order can arrive — which is what stops a legitimate
+   * order racing into being classified as a bypass. A callback rather than a direct
+   * reference because the reconciler calls back into `revokeScope`, and a mutual
+   * import would be a cycle.
+   */
+  readonly onDecision?: (record: DecisionRecord) => void;
 }
 
 /** What the agent is told. Denials are an outcome, not an error. */
@@ -76,6 +86,8 @@ export class TradingEngine {
   readonly #logger: Logger;
   readonly #runtimeEnv: "testnet" | "prod";
 
+  readonly #onDecision: ((record: DecisionRecord) => void) | undefined;
+
   #scopeRevoked = false;
   #revocationReason: string | undefined;
 
@@ -88,6 +100,7 @@ export class TradingEngine {
     this.#clock = options.clock;
     this.#logger = options.logger.child({ component: "engine" });
     this.#runtimeEnv = options.runtimeEnv;
+    this.#onDecision = options.onDecision;
   }
 
   get mandate(): Mandate {
@@ -153,6 +166,17 @@ export class TradingEngine {
       // order placed without a durable authorisation is indistinguishable from a bypass.
       this.#logger.error({ error: record.error.toJSON() }, "refusing to trade: audit write failed");
       return record;
+    }
+
+    // Publish before the order is sent. Ordering is the whole point.
+    if (this.#onDecision !== undefined) {
+      try {
+        this.#onDecision(record.value);
+      } catch (cause: unknown) {
+        // A failing subscriber must not stop the trade path, but it does mean the
+        // audit index may be incomplete, so it is logged at error level.
+        this.#logger.error({ cause }, "decision subscriber threw");
+      }
     }
 
     this.#logger.info(
