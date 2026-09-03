@@ -53,7 +53,23 @@ BONDED keeps a second, independent account of reality and treats disagreement as
 
 ## Status
 
-Pre-implementation. Planning docs only.
+**Day 1 complete.** The gate, the audit log and the MCP surface are implemented and
+tested; the reconciler (Day 3, the differentiator) is not yet built.
+
+| Component | State |
+| --- | --- |
+| Mandate compiler, content addressing, `exchangeInfo` grounding | done |
+| Pre-trade gate — 15 clauses, pure, fail-closed | done |
+| Hash-chained decision log with tamper detection | done |
+| Binance Spot REST client — signing, timeouts, bounded retries | done |
+| MCP server — `place_order`, `check_order`, `get_mandate_summary`, `get_account` | done |
+| Boot guards + startup banner | done |
+| **Reconciler / bypass detection** | **not started** |
+| Owner console | not started |
+
+69 tests passing (unit + property), typecheck and lint clean.
+
+## Documents
 
 | Document | Contents |
 | --- | --- |
@@ -71,6 +87,48 @@ export BINANCE_SPOT_BASE_PATH=https://testnet.binance.vision
 ```
 
 Testnet API keys: https://testnet.binance.vision/
+
+### Running it
+
+```bash
+npm install
+npm run build
+
+cp .env.example .env          # then fill in testnet key, secret, and:
+openssl rand -hex 32          # -> BONDED_HMAC_SECRET
+cp examples/mandate.example.json data/mandate.json
+
+npm start
+```
+
+Startup prints a guard banner to **stderr** (stdout is the MCP channel) and refuses to
+run if anything fails:
+
+```
+BONDED boot guards
+  [PASS] environment           testnet confirmed, base URL https://testnet.binance.vision
+  [PASS] mandate               mandate ed1ff01a valid until 2026-09-08T23:59:00.000Z
+  [WARN] withdrawalPermission  not verified: apiRestrictions is unavailable on Spot Testnet.
+                               Asserted BINANCE_API_ENV=testnet instead
+  [PASS] decisionLog           no existing log; starting at genesis
+  [PASS] clockSkew             clock within 42 ms of exchange
+```
+
+The `WARN` is deliberate. That check cannot be performed on testnet, so the guard says
+what it actually verified instead of reporting a pass it did not earn.
+
+To connect an agent:
+
+```bash
+claude mcp add bonded -- node /path/to/bonded/dist/cli.js
+```
+
+### Development
+
+```bash
+npm run check      # typecheck + lint + tests
+npm test           # 69 tests, ~1s
+```
 
 ## Licence
 

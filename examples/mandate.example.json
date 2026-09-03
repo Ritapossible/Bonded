@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "env": "testnet",
+  "symbols": ["BTCUSDT", "ETHUSDT"],
+  "orderTypes": ["LIMIT", "MARKET"],
+  "sides": ["BUY", "SELL"],
+  "maxNotionalUsd": "500",
+  "maxOpenOrders": 3,
+  "dailyLossLimitUsd": "50",
+  "maxDrawdownPct": "5",
+  "tradingWindowUtc": ["00:00", "23:59"],
+  "expiresAt": "2026-09-08T23:59:00.000Z"
+}

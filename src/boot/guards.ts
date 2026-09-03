@@ -1,0 +1,222 @@
+/**
+ * Boot guards.
+ *
+ * BONDED refuses to start unless the guarantees it advertises are actually in place.
+ * The point is that "the bound is real" should be verifiable by reading a startup log,
+ * not taken on trust from a README — a claim a reviewer can check beats a claim they
+ * have to believe.
+ *
+ * Every guard reports what it actually verified. Where a check cannot be performed in
+ * a given environment, it says so and downgrades to `WARN` rather than reporting a
+ * pass. **A guard must never claim a check it did not make.**
+ */
+
+import type { BinanceClient } from "../binance/client.js";
+import type { Config } from "../config/env.js";
+import { verifyChain } from "../audit/decision-log.js";
+import { ErrorCode, describeUnknownError } from "../core/errors.js";
+import type { Mandate } from "../domain/mandate.js";
+
+export type GuardStatus = "PASS" | "WARN" | "FAIL";
+
+export interface GuardResult {
+  readonly name: string;
+  readonly status: GuardStatus;
+  /** What was actually verified, in one line, for the startup banner. */
+  readonly detail: string;
+}
+
+export interface GuardContext {
+  readonly config: Config;
+  readonly client: BinanceClient;
+  readonly mandate: Mandate | undefined;
+  readonly nowMs: number;
+}
+
+/** Maximum tolerated skew against Binance's clock before signatures start failing. */
+const MAX_CLOCK_SKEW_MS = 2_000;
+
+/**
+ * Guard 1 — environment.
+ *
+ * A misconfiguration that points a testnet-shaped setup at production must fail
+ * loudly at boot, not quietly at the first order.
+ */
+function guardEnvironment(ctx: GuardContext): GuardResult {
+  const { env, baseUrl } = ctx.config.binance;
+  if (env === "prod" && !ctx.config.allowProd) {
+    return {
+      name: "environment",
+      status: "FAIL",
+      detail: "BINANCE_API_ENV=prod requires BONDED_ALLOW_PROD=1 to be set explicitly",
+    };
+  }
+  if (env === "testnet" && !baseUrl.includes("testnet")) {
+    return {
+      name: "environment",
+      status: "FAIL",
+      detail: `env is testnet but base URL does not look like a testnet host: ${baseUrl}`,
+    };
+  }
+  return {
+    name: "environment",
+    status: env === "testnet" ? "PASS" : "WARN",
+    detail:
+      env === "testnet"
+        ? `testnet confirmed, base URL ${baseUrl}`
+        : `PRODUCTION enabled via BONDED_ALLOW_PROD, base URL ${baseUrl}`,
+  };
+}
+
+/**
+ * Guard 2 — withdrawal permission.
+ *
+ * BONDED does not implement a withdrawal guard; it verifies that the exchange enforces
+ * one, which is the stronger position because that guarantee survives BONDED being
+ * wrong about everything else.
+ *
+ * `GET /sapi/v1/account/apiRestrictions` is a mainnet endpoint and is not expected to
+ * exist on Spot Testnet. When it cannot be queried this guard reports `WARN` and says
+ * exactly what it checked instead — it does not report a pass it did not earn.
+ */
+async function guardWithdrawalPermission(ctx: GuardContext): Promise<GuardResult> {
+  if (ctx.config.binance.env === "testnet") {
+    return {
+      name: "withdrawalPermission",
+      status: "WARN",
+      detail:
+        "not verified: apiRestrictions is unavailable on Spot Testnet. Asserted BINANCE_API_ENV=testnet instead",
+    };
+  }
+
+  const restrictions = await ctx.client.apiRestrictions();
+  if (!restrictions.ok) {
+    return {
+      name: "withdrawalPermission",
+      status: "FAIL",
+      detail: `could not read key restrictions: ${restrictions.error.message}`,
+    };
+  }
+  if (restrictions.value.enableWithdrawals) {
+    return {
+      name: "withdrawalPermission",
+      status: "FAIL",
+      detail: "the API key has withdrawals enabled; disable it in the Binance API management page",
+    };
+  }
+  return {
+    name: "withdrawalPermission",
+    status: "PASS",
+    detail: "verified via apiRestrictions: enableWithdrawals=false",
+  };
+}
+
+/** Guard 3 — a mandate must be loaded and unexpired. No mandate means no authority. */
+function guardMandate(ctx: GuardContext): GuardResult {
+  if (ctx.mandate === undefined) {
+    return {
+      name: "mandate",
+      status: "FAIL",
+      detail: `no mandate loaded from ${ctx.config.mandatePath}`,
+    };
+  }
+  if (ctx.nowMs >= ctx.mandate.expiresAtMs) {
+    return {
+      name: "mandate",
+      status: "FAIL",
+      detail: `mandate expired at ${ctx.mandate.spec.expiresAt}`,
+    };
+  }
+  return {
+    name: "mandate",
+    status: "PASS",
+    detail: `mandate ${ctx.mandate.hash.slice(0, 8)} valid until ${ctx.mandate.spec.expiresAt}`,
+  };
+}
+
+/** Guard 4 — the decision log's hash chain must verify from genesis. */
+async function guardDecisionLog(ctx: GuardContext): Promise<GuardResult> {
+  const verified = await verifyChain(ctx.config.decisionLogPath);
+  if (!verified.ok) {
+    // A missing file is a legitimate first run, not a broken chain.
+    if (verified.error.code === ErrorCode.DECISION_LOG_MISSING) {
+      return { name: "decisionLog", status: "PASS", detail: "no existing log; starting at genesis" };
+    }
+    return { name: "decisionLog", status: "FAIL", detail: verified.error.message };
+  }
+  return {
+    name: "decisionLog",
+    status: "PASS",
+    detail: `chain verified over ${String(verified.value.recordCount)} records, head ${verified.value.headHash.slice(0, 8)}`,
+  };
+}
+
+/**
+ * Guard 5 — clock skew.
+ *
+ * Binance rejects signed requests whose timestamp falls outside `recvWindow`. Catching
+ * skew here turns an intermittent, confusing `-1021` at trade time into one clear line
+ * at startup.
+ */
+async function guardClockSkew(ctx: GuardContext): Promise<GuardResult> {
+  const before = Date.now();
+  const time = await ctx.client.serverTime();
+  if (!time.ok) {
+    return {
+      name: "clockSkew",
+      status: "FAIL",
+      detail: `could not reach the exchange: ${time.error.message}`,
+    };
+  }
+  const after = Date.now();
+  // Compare against the midpoint of the request so round-trip latency is not counted
+  // as skew.
+  const localMidpoint = before + (after - before) / 2;
+  const skew = Math.round(time.value.serverTime - localMidpoint);
+
+  if (Math.abs(skew) > MAX_CLOCK_SKEW_MS) {
+    return {
+      name: "clockSkew",
+      status: "FAIL",
+      detail: `local clock differs from the exchange by ${String(skew)} ms (limit ${String(MAX_CLOCK_SKEW_MS)} ms)`,
+    };
+  }
+  return { name: "clockSkew", status: "PASS", detail: `clock within ${String(skew)} ms of exchange` };
+}
+
+/**
+ * Run every guard.
+ *
+ * All guards run even after one fails, so the operator sees the complete picture in a
+ * single pass rather than fixing problems one restart at a time.
+ */
+export async function runBootGuards(ctx: GuardContext): Promise<GuardResult[]> {
+  const results: GuardResult[] = [guardEnvironment(ctx), guardMandate(ctx)];
+
+  for (const guard of [guardWithdrawalPermission, guardDecisionLog, guardClockSkew]) {
+    try {
+      results.push(await guard(ctx));
+    } catch (cause: unknown) {
+      results.push({
+        name: guard.name,
+        status: "FAIL",
+        detail: `guard threw: ${describeUnknownError(cause)}`,
+      });
+    }
+  }
+  return results;
+}
+
+export function anyGuardFailed(results: readonly GuardResult[]): boolean {
+  return results.some((result) => result.status === "FAIL");
+}
+
+/** The startup banner. Written to stderr so it never touches the MCP stdio channel. */
+export function formatGuardBanner(results: readonly GuardResult[]): string {
+  const symbol: Record<GuardStatus, string> = { PASS: "PASS", WARN: "WARN", FAIL: "FAIL" };
+  const width = Math.max(...results.map((r) => r.name.length));
+  const lines = results.map(
+    (r) => `  [${symbol[r.status]}] ${r.name.padEnd(width)}  ${r.detail}`,
+  );
+  return ["BONDED boot guards", ...lines].join("\n");
+}

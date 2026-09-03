@@ -127,6 +127,21 @@ speed-up/cancel.
 
 Not used by BONDED. Recorded because it killed a sibling idea (§4).
 
+### Binance testnet geo-blocks some egress IPs
+
+Running the boot guards from the Claude Code sandbox returns, on `GET /api/v3/time`:
+
+> *Service unavailable from a restricted location according to 'b. Eligibility' in
+> https://www.binance.com/en/terms*
+
+That is the **sandbox's** egress location, not the builder's — Nigeria is eligible.
+Consequence: **live testnet integration cannot be exercised from the cloud session.**
+Every network-touching step has to be run locally. The stubbed-exchange test suite
+covers the logic; only the real round trip is blocked.
+
+Incidental confirmation that fail-closed works: the unreachable exchange produced a
+`FAIL` on the clock-skew guard and a refusal to start, rather than a silent degrade.
+
 ### Skills Hub mechanics
 
 [binance/binance-skills-hub](https://github.com/binance/binance-skills-hub) — 19 skills, split
@@ -159,6 +174,23 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 
 ---
 
+## 3b. Implementation decisions (Day 1)
+
+| Decision | Reasoning |
+| --- | --- |
+| **Pure gate, imperative shell** | `evaluate()` is a pure function of (mandate, intent, state, now). No I/O, no clock reads. Makes it exhaustively testable and deterministic under replay |
+| **All 15 clauses in one file** | A security boundary should be auditable on one screen. A `clauses/` directory makes "what does this actually enforce?" unanswerable without reading everything |
+| **`Result<T, E>` for expected failures; throw only for programmer errors** | An uncaught throw inside a gate is indistinguishable from "no rule fired" — that is precisely how a gate fails open |
+| **Every monetary value is a decimal string** | `0.1 + 0.2 !== 0.3` is not acceptable in a limit check. `decimal.js` is confined to `core/money.ts`; everything above it handles branded `DecimalString` |
+| **Restricted RFC 8785 canonicalisation** | Full JCS has to serialise arbitrary doubles, which is the fiddly part. Since no float ever reaches it, the serialiser rejects non-integer numbers rather than guessing a spelling |
+| **Logs to stderr only** | MCP speaks JSON-RPC over stdout. One log line there corrupts the transport and the failure points nowhere near the cause. `no-console` is a lint error |
+| **Order placement is never retried** | A timeout does not say whether the order reached the matching engine. A blind retry is how a bounded mandate produces two positions |
+| **Decision record written and fsync'd *before* the order is sent** | The reverse ordering would let a crash produce an order with no authorisation — a phantom bypass. The safe direction is an authorisation with no order, which reconciliation reads as benign |
+| **`clientOrderId` minted inside the append queue** | The id embeds the sequence number of the record authorising it. Reading `nextSeq` beforehand races: two concurrent callers would mint ids for the same seq |
+| **`get_mandate_summary` returns clause names, not thresholds** | If the agent could read the limits it would shape its behaviour to sit exactly inside them |
+| **A denial is a successful tool call, not an MCP error** | An error invites retry loops and buries the reason in a transport failure |
+| **`DECISION_LOG_MISSING` is distinct from `DECISION_LOG_CORRUPT`** | A first run must not look like tampering. Found by a smoke test: the guard was string-matching an error message and failed a clean first start |
+
 ## 4. Dead ends — do not re-litigate
 
 | Idea | Why it was dropped |
@@ -176,10 +208,11 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 
 | # | Question | Blocks | Status |
 | --- | --- | --- | --- |
-| 1 | Does `GET /sapi/v1/account/apiRestrictions` exist on Spot Testnet? | Boot guard 2's strength | Open — likely no; degrade gracefully and log what was actually checked |
+| 1 | Does `GET /sapi/v1/account/apiRestrictions` exist on Spot Testnet? | Boot guard 2's strength | **Handled** — the guard degrades to `WARN` on testnet and states what it checked instead. Verify on mainnet if that path is ever used |
 | 2 | What is `BINANCE_API_ENV=demo`? | Possibly a better demo surface | Open — undocumented |
 | 3 | Do user data streams work on Spot Testnet? | The reconciler | **Resolved — yes** (§2) |
-| 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | Open — prefer CLI for alignment |
+| 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | **Decided — direct REST.** The gate needs to control the exact query string it signs and to stamp `newClientOrderId` per order; shelling out to a CLI puts a process boundary in the hot path for no gain. `binance-cli` stays the documented way to *demonstrate a bypass* |
+| 6 | Live testnet round trip | The demo | **Blocked in the cloud sandbox** (geo-block, §2). Must be run locally |
 | 5 | What is already published on Binance Skills Hub's listing UI? | Competitive picture | **Unresolved** — `binance.com/en/skills` could not be loaded through this sandbox's proxy on three attempts. **Check manually** |
 
 ---
