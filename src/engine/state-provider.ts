@@ -16,20 +16,29 @@ import {
   parseExchangeInfo,
   parseOpenOrderCount,
   parseTickerPrices,
+  parseTrades,
 } from "../binance/mappers.js";
 import type { Clock } from "../core/clock.js";
 import { utcDayKey } from "../core/clock.js";
 import type { BondedError } from "../core/errors.js";
-import { ZERO } from "../core/money.js";
+import { ZERO, add, type DecimalString } from "../core/money.js";
 import { ok, type Result } from "../core/result.js";
 import type { ExchangeState, SymbolRules } from "../domain/exchange.js";
 import { STALENESS_BUDGET_MS } from "../domain/exchange.js";
+import { computeRealisedPnl, type Trade } from "../domain/pnl.js";
 
 /**
  * Refresh slightly ahead of the gate's staleness budget, so a snapshot is renewed
  * before it expires rather than after an order has already been denied for it.
  */
 const REFRESH_MARGIN_MS = 1_000;
+
+/**
+ * How far back trade history is kept, to establish a cost basis for positions opened
+ * before today. Sells against a position older than this are reported as unbasised
+ * rather than guessed at — see `domain/pnl.ts`.
+ */
+const BASIS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface Cached<T> {
   readonly value: T;
@@ -49,6 +58,13 @@ export class StateProvider {
   readonly #symbols: readonly string[];
 
   #symbolRules: Map<string, SymbolRules> = new Map();
+  /** Trades inside the basis window, per symbol, fetched incrementally. */
+  readonly #trades = new Map<string, Trade[]>();
+  /** Highest trade id seen per symbol, so each refresh fetches only what is new. */
+  readonly #lastTradeId = new Map<string, number>();
+  #pnl:
+    | Cached<{ realised: DecimalString; quoteBalance: DecimalString; incomplete: boolean }>
+    | undefined;
   #account:
     | Cached<{ canTrade: boolean; balances: ReadonlyMap<string, string>; openOrderCount: number }>
     | undefined;
@@ -140,6 +156,64 @@ export class StateProvider {
   }
 
   /**
+   * Refresh realised PnL from the exchange's own trade history.
+   *
+   * Fetches incrementally: the first pass reaches back over the basis window, and each
+   * later pass asks only for trades after the highest id already seen. Refetching a
+   * week of history every thirty seconds would burn rate limit for no new information.
+   */
+  async #refreshPnl(): Promise<Result<void, BondedError>> {
+    return this.#once("pnl", async () => {
+      const windowStart = this.#clock.now() - BASIS_WINDOW_MS;
+
+      for (const symbol of this.#symbols) {
+        const lastId = this.#lastTradeId.get(symbol);
+        const raw = await this.#client.myTrades(
+          symbol,
+          lastId === undefined ? { startTime: windowStart } : { fromId: lastId + 1 },
+        );
+        if (!raw.ok) return raw;
+        const parsed = parseTrades(raw.value);
+        if (!parsed.ok) return parsed;
+
+        const existing = this.#trades.get(symbol) ?? [];
+        // Drop trades that have aged out of the basis window, so memory is bounded by
+        // the window rather than by uptime.
+        const merged = [...existing, ...parsed.value].filter((t) => t.timeMs >= windowStart);
+        this.#trades.set(symbol, merged);
+
+        for (const trade of parsed.value) {
+          const highest = this.#lastTradeId.get(symbol);
+          if (highest === undefined || trade.id > highest) this.#lastTradeId.set(symbol, trade.id);
+        }
+      }
+
+      const quoteAssets = new Set([...this.#symbolRules.values()].map((rules) => rules.quoteAsset));
+      const allTrades = [...this.#trades.values()].flat();
+      const observedAtMs = this.#clock.now();
+      const pnl = computeRealisedPnl(allTrades, observedAtMs, quoteAssets);
+
+      // The drawdown cap is a percentage of what the account actually holds in the
+      // quote asset, read from the same account snapshot the other clauses use.
+      let quoteBalance = ZERO;
+      for (const asset of quoteAssets) {
+        const held = this.#account?.value.balances.get(asset);
+        if (held !== undefined) quoteBalance = add(quoteBalance, held as DecimalString);
+      }
+
+      this.#pnl = {
+        observedAtMs,
+        value: {
+          realised: pnl.realised,
+          quoteBalance,
+          incomplete: pnl.unbasisedQuantity.size > 0,
+        },
+      };
+      return ok(undefined);
+    });
+  }
+
+  /**
    * Produce a state snapshot for a gate evaluation, refreshing whatever has aged out.
    *
    * A refresh failure is *not* propagated as an error: the stale snapshot is returned
@@ -161,6 +235,12 @@ export class StateProvider {
     ) {
       tasks.push(this.#refreshPrices());
     }
+    if (
+      this.#pnl === undefined ||
+      !this.#isFresh(this.#pnl.observedAtMs, STALENESS_BUDGET_MS.dailyPnl)
+    ) {
+      tasks.push(this.#refreshPnl());
+    }
     await Promise.all(tasks);
 
     const now = this.#clock.now();
@@ -168,6 +248,7 @@ export class StateProvider {
     // "now", so the gate treats it as stale instead of trusting an empty default.
     const account = this.#account;
     const prices = this.#prices;
+    const pnl = this.#pnl;
 
     return {
       account: {
@@ -181,11 +262,11 @@ export class StateProvider {
         prices: (prices?.value ?? new Map()) as ReadonlyMap<string, never>,
       },
       dailyPnl: {
-        // Day 3 replaces this with a figure derived from myTrades. Until then it is
-        // reported as observed-now and zero, and the clause simply does not bind.
-        observedAtMs: now,
+        observedAtMs: pnl?.observedAtMs ?? Number.NEGATIVE_INFINITY,
         dayKey: utcDayKey(now),
-        realisedUsd: ZERO,
+        realisedUsd: pnl?.value.realised ?? ZERO,
+        quoteBalance: pnl?.value.quoteBalance ?? ZERO,
+        incomplete: pnl?.value.incomplete ?? false,
       },
       symbolRules: this.#symbolRules,
     };

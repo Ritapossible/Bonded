@@ -69,8 +69,22 @@ export interface DailyPnl {
   readonly observedAtMs: number;
   /** UTC `YYYY-MM-DD` the figure covers. */
   readonly dayKey: string;
-  /** Negative means a loss. Quote-asset units. */
+  /** Negative means a loss. Quote-asset units. See `domain/pnl.ts` for the definition. */
   readonly realisedUsd: DecimalString;
+  /**
+   * Quote-asset balance the drawdown limit is measured against.
+   *
+   * `maxDrawdownPct` is a proportional cap: it binds when the day's realised loss reaches
+   * this percentage of the account's quote-asset holdings. It sits alongside the absolute
+   * `dailyLossLimitUsd`, and whichever is tighter fires first.
+   */
+  readonly quoteBalance: DecimalString;
+  /**
+   * True when some of the day's sells had no known cost basis, so `realisedUsd`
+   * understates activity. The gate still enforces on the figure it has — under-reporting
+   * a loss must not become a reason to stop enforcing — but the caller can surface it.
+   */
+  readonly incomplete: boolean;
 }
 
 /** Everything the gate may read about the world. Assembled by the shell, never fetched by a rule. */

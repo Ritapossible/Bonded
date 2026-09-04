@@ -72,6 +72,7 @@ instead; it never claims a check it did not make.
 | --- | --- |
 | `place_order` | Submit a Spot order for evaluation. Returns `PLACED`, `DENIED` or `FAILED` |
 | `check_order` | Evaluate an order **without** placing it or consuming an audit entry |
+| `cancel_order` | Cancel an order by its client order id. Never refused — see below |
 | `get_mandate_summary` | Mandate hash, expiry, clause **names**, and whether scope is revoked |
 | `get_account` | Balances and open-order count, with the time they were observed |
 
@@ -85,6 +86,13 @@ A `LIMIT` order needs `quantity` and `price`. A `MARKET` order needs **either** 
 (base asset) **or** `quoteOrderQty` (quote asset) — never both. All numeric values are
 decimal **strings**, matching Binance's own convention; a float loses precision that a
 limit check depends on.
+
+### Cancelling
+
+Cancellation is **always permitted**, deliberately. Every mandate clause exists to limit
+exposure, and cancelling only ever reduces it — a gate able to refuse a cancellation could
+trap an agent in a position it is not allowed to close, which is the opposite of what the
+mandate is for.
 
 ## How to behave when an order is denied
 

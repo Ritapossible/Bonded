@@ -27,7 +27,11 @@ import { createLogger, type Logger } from "./observability/logger.js";
 import { ActivityFeed } from "./console/activity.js";
 import { ConsoleServer } from "./console/server.js";
 import { AuthorisationIndex } from "./reconcile/authorisation-index.js";
-import { PollingOrderSource, UserDataStreamSource } from "./reconcile/order-source.js";
+import {
+  PollingOrderSource,
+  UserDataStreamSource,
+  type OrderSource,
+} from "./reconcile/order-source.js";
 import { Reconciler } from "./reconcile/reconciler.js";
 
 const VERSION = "0.1.0";
@@ -153,6 +157,10 @@ async function main(): Promise<number> {
     },
   });
 
+  // Declared before the engine so the health callback can close over it, and populated
+  // once the sources exist. The engine only ever reads it at evaluation time.
+  const sources: OrderSource[] = [];
+
   const engine = new TradingEngine({
     mandate,
     client,
@@ -162,6 +170,8 @@ async function main(): Promise<number> {
     clock: systemClock,
     logger,
     runtimeEnv: config.value.binance.env,
+    // Either source delivering is enough; they overlap deliberately.
+    isAuditPathHealthy: () => sources.some((source) => source.healthy),
     onDecision: (record) => {
       reconciler.authorise(record);
       feed.recordDecision(record);
@@ -179,6 +189,7 @@ async function main(): Promise<number> {
     symbols: mandate.spec.symbols,
     intervalMs: config.value.pollIntervalMs,
   });
+  sources.push(poller);
   await poller.start((orders) => {
     reconciler.observeAll(orders);
   });
@@ -199,6 +210,7 @@ async function main(): Promise<number> {
     logger,
     streamBaseUrl: config.value.binance.streamUrl,
   });
+  sources.push(stream);
   await stream.start((orders) => {
     reconciler.observeAll(orders);
   });
@@ -215,7 +227,7 @@ async function main(): Promise<number> {
           engine,
           reconciler,
           feed,
-          orderSources: [stream, poller],
+          orderSources: sources,
           env: config.value.binance.env,
           startedAtMs: systemClock.now(),
         });
@@ -233,16 +245,39 @@ async function main(): Promise<number> {
 
   // Flush the audit log before exiting. A record that never reached disk is a record
   // reconciliation will later read as a bypass.
-  const shutdown = async (signal: string): Promise<void> => {
-    logger.info({ signal }, "shutting down");
-    await consoleServer?.stop();
-    await stream.stop();
-    await poller.stop();
-    await decisionLog.value.close();
-    process.exit(0);
+  let shuttingDown = false;
+  const shutdown = async (reason: string, code: number): Promise<void> => {
+    // A second signal while the first shutdown is in flight must not start a parallel
+    // teardown that closes the log twice.
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ reason }, "shutting down");
+    try {
+      await consoleServer?.stop();
+      await stream.stop();
+      await poller.stop();
+      await decisionLog.value.close();
+    } catch (cause: unknown) {
+      logger.error({ error: describeUnknownError(cause) }, "error during shutdown");
+      process.exit(1);
+    }
+    process.exit(code);
   };
-  process.on("SIGINT", () => void shutdown("SIGINT"));
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+  process.on("SIGINT", () => void shutdown("SIGINT", 0));
+  process.on("SIGTERM", () => void shutdown("SIGTERM", 0));
+
+  // An unexpected throw anywhere leaves the process in a state whose invariants are no
+  // longer known. Continuing to trade from there is the worst option available, so
+  // BONDED records what happened, flushes the audit log, and stops.
+  process.on("uncaughtException", (error: Error) => {
+    logger.fatal({ error: describeUnknownError(error), stack: error.stack }, "uncaught exception");
+    void shutdown("uncaughtException", 70);
+  });
+  process.on("unhandledRejection", (reason: unknown) => {
+    logger.fatal({ error: describeUnknownError(reason) }, "unhandled rejection");
+    void shutdown("unhandledRejection", 70);
+  });
 
   await startMcpServer(server, logger);
   emit(

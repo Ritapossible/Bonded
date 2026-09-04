@@ -42,6 +42,15 @@ export interface TradingEngineOptions {
   readonly logger: Logger;
   readonly runtimeEnv: "testnet" | "prod";
   /**
+   * Whether reconciliation can currently observe the account.
+   *
+   * Required rather than optional, and a callback rather than a snapshot, because the
+   * answer changes while the process runs. "No audit path, no trading" has to be true
+   * for the life of the process, not just at boot — a gate that keeps allowing orders
+   * it can no longer reconcile has quietly stopped making its central claim.
+   */
+  readonly isAuditPathHealthy: () => boolean;
+  /**
    * Called with every durably written decision record, before the order is sent.
    *
    * The reconciler subscribes here so its authorisation index is populated *before*
@@ -86,6 +95,7 @@ export class TradingEngine {
   readonly #logger: Logger;
   readonly #runtimeEnv: "testnet" | "prod";
 
+  readonly #isAuditPathHealthy: () => boolean;
   readonly #onDecision: ((record: DecisionRecord) => void) | undefined;
 
   #scopeRevoked = false;
@@ -100,6 +110,7 @@ export class TradingEngine {
     this.#clock = options.clock;
     this.#logger = options.logger.child({ component: "engine" });
     this.#runtimeEnv = options.runtimeEnv;
+    this.#isAuditPathHealthy = options.isAuditPathHealthy;
     this.#onDecision = options.onDecision;
   }
 
@@ -144,6 +155,7 @@ export class TradingEngine {
       nowMs: this.#clock.now(),
       runtimeEnv: this.#runtimeEnv,
       scopeRevoked: this.#scopeRevoked,
+      auditPathHealthy: this.#isAuditPathHealthy(),
     });
   }
 
@@ -158,6 +170,7 @@ export class TradingEngine {
       nowMs,
       runtimeEnv: this.#runtimeEnv,
       scopeRevoked: this.#scopeRevoked,
+      auditPathHealthy: this.#isAuditPathHealthy(),
     });
 
     const record = await this.#recordDecision(intent, result, nowMs);
@@ -225,6 +238,24 @@ export class TradingEngine {
       seq: record.value.seq,
       exchangeResponse: placed.value,
     });
+  }
+
+  /**
+   * Cancel an order.
+   *
+   * **Deliberately not gated.** Every mandate clause exists to limit exposure, and
+   * cancelling only ever reduces it. A gate that could refuse a cancellation would be
+   * able to trap an agent in a position it is not allowed to close — the opposite of
+   * what the mandate is for. Cancellation is still recorded, so the audit trail shows
+   * the full lifecycle rather than an order that silently disappears.
+   */
+  async cancelOrder(symbol: string, clientOrderId: string): Promise<Result<unknown, BondedError>> {
+    const result = await this.#client.cancelOrder({ symbol, origClientOrderId: clientOrderId });
+    this.#logger.info(
+      { symbol, clientOrderId, ok: result.ok },
+      result.ok ? "order cancelled" : "cancellation refused by the exchange",
+    );
+    return result;
   }
 
   /**

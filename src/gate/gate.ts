@@ -28,6 +28,7 @@ import {
   isNegative,
   lessThan,
   multiply,
+  percentOf,
   type DecimalString,
 } from "../core/money.js";
 import { ALLOW, ClauseId, deny, type Verdict } from "../domain/decision.js";
@@ -53,6 +54,15 @@ export interface GateInput {
   readonly runtimeEnv: "testnet" | "prod";
   /** Set once the reconciler has burned the bond. Denies everything. */
   readonly scopeRevoked: boolean;
+  /**
+   * Whether at least one order source is currently delivering.
+   *
+   * "No audit path, no trading" is a stated invariant, and enforcing it only at boot
+   * would leave it false for the entire life of the process the moment a feed died.
+   * A gate that keeps allowing orders it can no longer reconcile is a gate whose
+   * central claim has quietly stopped being true.
+   */
+  readonly auditPathHealthy: boolean;
 }
 
 /** Input plus the values derived once in the prelude, so no clause recomputes them. */
@@ -136,6 +146,21 @@ export const CLAUSES: readonly Clause[] = [
             observed: "scope revoked",
           })
         : ALLOW,
+  },
+
+  {
+    id: ClauseId.AUDIT_PATH,
+    text: "Reconciliation must be able to observe the account before an order is placed.",
+    requires: [],
+    evaluate: (ctx) =>
+      ctx.auditPathHealthy
+        ? ALLOW
+        : deny({
+            clause: ClauseId.AUDIT_PATH,
+            clauseText:
+              "Reconciliation must be able to observe the account before an order is placed.",
+            observed: "no order source is delivering",
+          }),
   },
 
   {
@@ -363,7 +388,7 @@ export const CLAUSES: readonly Clause[] = [
       const realised = ctx.state.dailyPnl.realisedUsd;
       if (!isNegative(realised)) return ALLOW;
       // `realised` is negative here, so its magnitude is the loss so far.
-      const loss = multiply(realised, "-1" as DecimalString);
+      const loss = multiply(realised, NEGATIVE_ONE);
       return compare(loss, ctx.mandate.dailyLossLimitUsd) >= 0
         ? deny({
             clause: ClauseId.DAILY_LOSS_LIMIT,
@@ -375,7 +400,37 @@ export const CLAUSES: readonly Clause[] = [
         : ALLOW;
     },
   },
+
+  {
+    id: ClauseId.MAX_DRAWDOWN,
+    text: "The day's realised loss must not exceed the mandate's percentage of quote balance.",
+    requires: ["dailyPnl"],
+    evaluate: (ctx) => {
+      const realised = ctx.state.dailyPnl.realisedUsd;
+      if (!isNegative(realised)) return ALLOW;
+
+      const balance = ctx.state.dailyPnl.quoteBalance;
+      // With no quote balance there is nothing to take a percentage of. The absolute
+      // `dailyLossLimitUsd` clause still binds, so this is a gap in one cap rather than
+      // an unbounded account.
+      if (compare(balance, ZERO) <= 0) return ALLOW;
+
+      const loss = multiply(realised, NEGATIVE_ONE);
+      const allowed = percentOf(balance, ctx.mandate.maxDrawdownPct);
+      return compare(loss, allowed) >= 0
+        ? deny({
+            clause: ClauseId.MAX_DRAWDOWN,
+            clauseText:
+              "The day's realised loss must not exceed the mandate's percentage of quote balance.",
+            observed: `${loss} of ${balance}`,
+            limit: `${allowed} (${ctx.mandate.spec.maxDrawdownPct}% of balance)`,
+          })
+        : ALLOW;
+    },
+  },
 ];
+
+const NEGATIVE_ONE = "-1" as DecimalString;
 
 /** A max of `"0"` means the filter is disabled, matching Binance's convention. */
 function outsideMax(value: DecimalString, max: DecimalString): boolean {

@@ -39,6 +39,11 @@ export interface BinanceClientOptions {
   /** Injected for tests. Defaults to global fetch. */
   readonly fetchImpl?: typeof fetch;
   readonly maxRetries?: number;
+  /**
+   * Injected so tests do not have to spend real seconds proving that backoff happens.
+   * Defaults to a real timer.
+   */
+  readonly sleep?: (ms: number) => Promise<void>;
 }
 
 /** Binance's own error envelope. */
@@ -74,6 +79,7 @@ export class BinanceClient {
   readonly #logger: Logger;
   readonly #fetch: typeof fetch;
   readonly #maxRetries: number;
+  readonly #sleep: (ms: number) => Promise<void>;
   /** Most recent used-weight reading, for backoff decisions and the console. */
   #usedWeight = 0;
 
@@ -86,6 +92,7 @@ export class BinanceClient {
     this.#logger = options.logger.child({ component: "binance-client" });
     this.#fetch = options.fetchImpl ?? globalThis.fetch;
     this.#maxRetries = options.maxRetries ?? 3;
+    this.#sleep = options.sleep ?? delay;
   }
 
   get usedWeight(): number {
@@ -124,7 +131,7 @@ export class BinanceClient {
 
     for (let attempt = 0; attempt <= this.#maxRetries; attempt++) {
       if (attempt > 0) {
-        await delay(backoffMs(attempt));
+        await this.#sleep(backoffMs(attempt));
       }
 
       const attemptResult = await this.#attempt<T>(options);
@@ -337,6 +344,37 @@ export class BinanceClient {
         symbol,
         ...(options.startTime === undefined ? {} : { startTime: options.startTime }),
         limit: options.limit ?? 500,
+      },
+      security: "SIGNED",
+      retryable: true,
+    });
+  }
+
+  /**
+   * Executed fills for a symbol. The input to realised-PnL computation.
+   *
+   * `startTime` reaches back beyond the current day so a position opened earlier has a
+   * known cost basis; without that, a sell would be reported as unbasised.
+   */
+  async myTrades(
+    symbol: string,
+    options: {
+      readonly startTime?: number;
+      /** Fetch only trades after this id. Mutually exclusive with `startTime`. */
+      readonly fromId?: number;
+      readonly limit?: number;
+    } = {},
+  ): Promise<Result<unknown[], BondedError>> {
+    return this.#request({
+      method: "GET",
+      path: "/api/v3/myTrades",
+      query: {
+        symbol,
+        ...(options.fromId === undefined ? {} : { fromId: options.fromId }),
+        ...(options.fromId === undefined && options.startTime !== undefined
+          ? { startTime: options.startTime }
+          : {}),
+        limit: options.limit ?? 1000,
       },
       security: "SIGNED",
       retryable: true,

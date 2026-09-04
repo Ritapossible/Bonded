@@ -47,7 +47,13 @@ function state(overrides: Partial<ExchangeState> = {}): ExchangeState {
   return {
     account: { observedAtMs: NOW, canTrade: true, balances: new Map(), openOrderCount: 0 },
     prices: { observedAtMs: NOW, prices: new Map([["ETHUSDT", decimalUnsafe("2000")]]) },
-    dailyPnl: { observedAtMs: NOW, dayKey: "2026-09-06", realisedUsd: decimalUnsafe("0") },
+    dailyPnl: {
+      observedAtMs: NOW,
+      dayKey: "2026-09-06",
+      realisedUsd: decimalUnsafe("0"),
+      quoteBalance: decimalUnsafe("10000"),
+      incomplete: false,
+    },
     symbolRules: new Map([
       ["ETHUSDT", ETH_RULES],
       ["BTCUSDT", BTC_RULES],
@@ -72,6 +78,7 @@ function input(overrides: Partial<GateInput> = {}): GateInput {
     nowMs: NOW,
     runtimeEnv: "testnet",
     scopeRevoked: false,
+    auditPathHealthy: true,
     ...overrides,
   };
 }
@@ -180,15 +187,104 @@ describe("gate", () => {
 
   it("denies once the daily realised loss reaches the limit", () => {
     const losing = state({
-      dailyPnl: { observedAtMs: NOW, dayKey: "2026-09-06", realisedUsd: decimalUnsafe("-50") },
+      dailyPnl: {
+        observedAtMs: NOW,
+        dayKey: "2026-09-06",
+        realisedUsd: decimalUnsafe("-50"),
+        quoteBalance: decimalUnsafe("10000"),
+        incomplete: false,
+      },
     });
     const denial = expectDeny(evaluate(input({ state: losing })), ClauseId.DAILY_LOSS_LIMIT);
     expect(denial.observed).toBe("50");
   });
 
+  it("denies when no order source is delivering", () => {
+    // "No audit path, no trading" has to hold for the life of the process, not just at
+    // boot. A gate that keeps allowing orders it can no longer reconcile has quietly
+    // stopped making its central claim.
+    expectDeny(evaluate(input({ auditPathHealthy: false })), ClauseId.AUDIT_PATH);
+  });
+
+  describe("maxDrawdownPct", () => {
+    it("denies once the loss reaches the mandate's percentage of quote balance", () => {
+      // 5% of 10000 is 500; a 500 loss is at the cap. The absolute limit is 50, so the
+      // absolute clause fires first — raise it so the proportional one is what binds.
+      const proportional = mandate({ dailyLossLimitUsd: "100000" });
+      const losing = state({
+        dailyPnl: {
+          observedAtMs: NOW,
+          dayKey: "2026-09-06",
+          realisedUsd: decimalUnsafe("-500"),
+          quoteBalance: decimalUnsafe("10000"),
+          incomplete: false,
+        },
+      });
+      const denial = expectDeny(
+        evaluate(input({ mandate: proportional, state: losing })),
+        ClauseId.MAX_DRAWDOWN,
+      );
+      expect(denial.limit).toContain("500");
+    });
+
+    it("allows below the percentage cap", () => {
+      const proportional = mandate({ dailyLossLimitUsd: "100000" });
+      const losing = state({
+        dailyPnl: {
+          observedAtMs: NOW,
+          dayKey: "2026-09-06",
+          realisedUsd: decimalUnsafe("-499.99"),
+          quoteBalance: decimalUnsafe("10000"),
+          incomplete: false,
+        },
+      });
+      expect(evaluate(input({ mandate: proportional, state: losing })).verdict.outcome).toBe(
+        "ALLOW",
+      );
+    });
+
+    it("does not bind when there is no quote balance to measure against", () => {
+      // The absolute limit still applies; this is a gap in one cap, not an unbounded
+      // account, and it is better than dividing by zero.
+      const proportional = mandate({ dailyLossLimitUsd: "100000" });
+      const losing = state({
+        dailyPnl: {
+          observedAtMs: NOW,
+          dayKey: "2026-09-06",
+          realisedUsd: decimalUnsafe("-5000"),
+          quoteBalance: decimalUnsafe("0"),
+          incomplete: false,
+        },
+      });
+      expect(evaluate(input({ mandate: proportional, state: losing })).verdict.outcome).toBe(
+        "ALLOW",
+      );
+    });
+
+    it("lets whichever cap is tighter fire first", () => {
+      // Absolute 50 vs proportional 500: the absolute one binds at a smaller loss.
+      const losing = state({
+        dailyPnl: {
+          observedAtMs: NOW,
+          dayKey: "2026-09-06",
+          realisedUsd: decimalUnsafe("-60"),
+          quoteBalance: decimalUnsafe("10000"),
+          incomplete: false,
+        },
+      });
+      expectDeny(evaluate(input({ state: losing })), ClauseId.DAILY_LOSS_LIMIT);
+    });
+  });
+
   it("allows while the daily loss is still below the limit", () => {
     const losing = state({
-      dailyPnl: { observedAtMs: NOW, dayKey: "2026-09-06", realisedUsd: decimalUnsafe("-49.99") },
+      dailyPnl: {
+        observedAtMs: NOW,
+        dayKey: "2026-09-06",
+        realisedUsd: decimalUnsafe("-49.99"),
+        quoteBalance: decimalUnsafe("10000"),
+        incomplete: false,
+      },
     });
     expect(evaluate(input({ state: losing })).verdict.outcome).toBe("ALLOW");
   });

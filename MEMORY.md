@@ -229,6 +229,29 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 | **`closeAllConnections()` on shutdown** | Found by a test: `close()` alone waits indefinitely on keep-alive sockets, so shutdown hung once the console had ever been opened, and pooled clients were handed a dying socket |
 | **The activity feed is a bounded display buffer, not the audit trail** | The decision log on disk is authoritative. Keeping that explicit stops a display concern quietly becoming safety-critical |
 
+## 3e. Backend hardening audit (2026-09-04)
+
+A self-audit of documented-versus-enforced found five real gaps. Two were integrity
+problems — limits that the README described, the console displayed, and **nothing
+enforced**. For a project whose entire claim is not overstating itself, that was the worst
+possible category of bug.
+
+| Gap | Severity | Resolution |
+| --- | --- | --- |
+| `dailyLossLimitUsd` clause existed but `realisedUsd` was hardcoded to zero, so it could never fire | **Integrity** | Real realised-PnL computation from `myTrades`, average cost basis, in `domain/pnl.ts` |
+| `maxDrawdownPct` was in the schema and on the console with **no clause at all** | **Integrity** | New clause: the loss as a percentage of quote balance, alongside the absolute cap |
+| "No audit path, no trading" was enforced only at boot; a feed dying mid-session left it false forever | **Integrity** | New `auditPath` clause, fed by a required `isAuditPathHealthy` callback |
+| `package.json` `exports` pointed at `dist/index.js`, which did not exist | Correctness | `src/index.ts` with a deliberate public API; CI asserts it resolves |
+| No `cancel_order` tool — an agent could open a position it could not close | Correctness | Added, and **deliberately ungated**: cancelling only reduces exposure |
+
+Also fixed: unbounded growth in the reconciler's de-duplication set, no process-level
+handlers for `uncaughtException` / `unhandledRejection`, no CI, and zero test coverage on
+the Binance client — the module that signs every request and decides what may be retried.
+
+**Method worth repeating:** grep for every clause name the docs mention, then check it
+appears in `gate.ts`. Documentation and enforcement drift silently, and only that
+comparison catches it.
+
 ## 4. Dead ends — do not re-litigate
 
 | Idea | Why it was dropped |

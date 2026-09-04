@@ -13,6 +13,7 @@ import type { DecimalString } from "../core/money.js";
 import { ZERO } from "../core/money.js";
 import { err, ok, type Result } from "../core/result.js";
 import type { AccountSnapshot, PriceSnapshot, SymbolRules } from "../domain/exchange.js";
+import type { Trade } from "../domain/pnl.js";
 
 /** Binance sends every numeric field as a string; this is the shape we accept. */
 const numericString = z.string().regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/, "not a plain decimal");
@@ -51,6 +52,18 @@ const BalanceSchema = z.object({ asset: z.string(), free: numericString, locked:
 const AccountSchema = z.object({
   canTrade: z.boolean(),
   balances: z.array(BalanceSchema),
+});
+
+const TradeSchema = z.object({
+  symbol: z.string(),
+  id: z.number(),
+  time: z.number(),
+  isBuyer: z.boolean(),
+  price: numericString,
+  qty: numericString,
+  quoteQty: numericString,
+  commission: numericString,
+  commissionAsset: z.string(),
 });
 
 const TickerSchema = z.object({ symbol: z.string(), price: numericString });
@@ -168,6 +181,33 @@ export function parseTickerPrices(
     prices.set(ticker.symbol, ticker.price as DecimalString);
   }
   return ok({ observedAtMs, prices });
+}
+
+/** Executed fills, for realised-PnL computation. */
+export function parseTrades(raw: unknown): Result<Trade[], BondedError> {
+  if (!Array.isArray(raw)) {
+    return err(
+      bondedError(ErrorCode.EXCHANGE_MALFORMED_RESPONSE, "myTrades did not return an array"),
+    );
+  }
+  const trades: Trade[] = [];
+  for (const entry of raw) {
+    const parsed = TradeSchema.safeParse(entry);
+    if (!parsed.success) return err(malformed("myTrades entry", parsed.error.issues));
+    const trade = parsed.data;
+    trades.push({
+      symbol: trade.symbol,
+      id: trade.id,
+      timeMs: trade.time,
+      isBuyer: trade.isBuyer,
+      price: trade.price as DecimalString,
+      quantity: trade.qty as DecimalString,
+      quoteQuantity: trade.quoteQty as DecimalString,
+      commission: trade.commission as DecimalString,
+      commissionAsset: trade.commissionAsset,
+    });
+  }
+  return ok(trades);
 }
 
 /** Open-order count. Used for the `maxOpenOrders` clause. */

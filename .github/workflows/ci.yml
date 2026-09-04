@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing here needs write access; a leaked token on a fork PR should be able to do
+# nothing but read this repository.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly the lockfile and fails
+      # if package.json and the lock have drifted, which is the point of running in CI.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Test
+        run: npm run test
+
+      # Proves the published entry points actually compile, not just the source tree.
+      - name: Build
+        run: npm run build
+
+      - name: Verify the package entry point resolves
+        run: node -e "import('./dist/index.js').then(m => { if (typeof m.evaluate !== 'function') { throw new Error('public API is missing evaluate'); } })"

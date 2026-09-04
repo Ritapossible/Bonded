@@ -118,6 +118,11 @@ class StubExchange {
         return json({ canTrade: true, balances: [{ asset: "USDT", free: "10000", locked: "0" }] });
       case "/api/v3/ticker/price":
         return json({ symbol: "ETHUSDT", price: "2000" });
+      case "/api/v3/myTrades":
+        // No fills: realised PnL is zero and the loss clauses do not bind. The route
+        // must exist regardless — a missing trade history leaves the PnL snapshot
+        // stale, and the gate correctly denies rather than guessing.
+        return json([]);
       case "/api/v3/allOrders":
         return json(this.orders);
       case "/api/v3/order": {
@@ -225,6 +230,7 @@ describe("bypass detection, end to end", () => {
       clock,
       logger,
       runtimeEnv: "testnet",
+      isAuditPathHealthy: () => true,
       onDecision: (record) => {
         reconciler.authorise(record);
       },

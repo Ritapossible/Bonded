@@ -91,6 +91,19 @@ is stronger, because that guarantee survives BONDED being wrong about everything
 guard reports `WARN` and states that it asserted `BINANCE_API_ENV=testnet` instead. It does
 not report a pass it did not earn.
 
+### Two loss limits, and what they mean
+
+`dailyLossLimitUsd` is absolute; `maxDrawdownPct` is the same loss as a percentage of the
+account's quote-asset balance. Whichever is tighter fires first. Both compare against
+**realised** PnL computed with an average cost basis from Binance's own trade history —
+the definition is stated in full in `src/domain/pnl.ts`, because an undefined risk metric
+is worse than none.
+
+Positions opened before the seven-day basis window have no known cost here. Selling one
+realises an unknown amount, so that quantity is excluded from the figure and reported
+rather than guessed at. The limits therefore **understate** activity in that case; they
+never overstate it.
+
 ### The gate is only as good as the mandate
 
 A mandate that compiles to weaker rules than the owner intended fails silently — nothing
@@ -126,7 +139,8 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Component | State |
 | --- | --- |
 | Mandate compiler, content addressing, `exchangeInfo` grounding | done |
-| Pre-trade gate — 15 clauses, pure, fail-closed | done |
+| Pre-trade gate — 17 clauses, pure, fail-closed | done |
+| Realised PnL from trade history — the figure the loss limits bind on | done |
 | Hash-chained decision log with tamper detection | done |
 | Binance Spot REST client — signing, timeouts, bounded retries | done |
 | MCP server — `place_order`, `check_order`, `get_mandate_summary`, `get_account` | done |
@@ -134,8 +148,9 @@ revoke — is covered by an integration test against a stubbed exchange.
 | **Reconciler — authorisation index, classification, bond burn** | **done** |
 | Order sources — polling backstop + user data stream | done |
 | Owner console — one screen, live over SSE | done |
+| Public API entry point, CI, process-level failure handling | done |
 
-109 tests passing (unit, property, integration), typecheck and lint clean.
+147 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -219,7 +234,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 109 tests, ~1.4s
+npm test           # 147 tests, ~1.7s
 ```
 
 ## Licence

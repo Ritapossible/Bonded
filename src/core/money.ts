@@ -134,6 +134,24 @@ export function isMultipleOf(value: DecimalString, step: DecimalString): boolean
   return d(value).modulo(stepDecimal).isZero();
 }
 
+/**
+ * Exact division, rounding **down** to 18 decimal places.
+ *
+ * Division is the one operation here that cannot always be exact — 1/3 has no finite
+ * decimal form — so it is the one operation that needs a documented rounding rule.
+ * `ROUND_DOWN` is chosen because every quotient in BONDED feeds a cost basis, and
+ * understating a cost basis understates a profit rather than a loss. A limit check must
+ * never round in the permissive direction.
+ *
+ * Dividing by zero returns zero rather than producing `Infinity`, which would silently
+ * defeat every downstream comparison.
+ */
+export function divide(numerator: DecimalString, denominator: DecimalString): DecimalString {
+  const divisor = d(denominator);
+  if (divisor.isZero()) return ZERO;
+  return format(d(numerator).dividedBy(divisor).toDecimalPlaces(18, Decimal.ROUND_DOWN));
+}
+
 /** Percentage of a base value: `percentOf("200", "5")` is `"10"`. */
 export function percentOf(base: DecimalString, percent: DecimalString): DecimalString {
   return format(d(base).times(d(percent)).dividedBy(100));

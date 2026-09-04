@@ -37,6 +37,8 @@ export interface ReconcilerOptions {
   readonly logger: Logger;
   /** Invoked once per finding. In production this burns the bond and revokes scope. */
   readonly onFinding: (finding: Finding) => void;
+  /** Maximum orders remembered for de-duplication. Defaults to 10,000. */
+  readonly seenCapacity?: number;
 }
 
 export interface ReconcilerStats {
@@ -63,6 +65,15 @@ export class Reconciler {
    * an alerting channel becomes noise nobody reads.
    */
   readonly #seen = new Set<string>();
+  /**
+   * Cap on the de-duplication set.
+   *
+   * Unbounded, it grows with every order for the life of the process — a slow leak in
+   * the one component that must survive longest. Evicting the oldest entries risks
+   * re-reporting a very old order, which is a far better failure than exhausting memory
+   * and losing the audit path entirely.
+   */
+  readonly #seenCapacity: number;
   readonly #findings: Finding[] = [];
   #observed = 0;
   #authorised = 0;
@@ -75,6 +86,7 @@ export class Reconciler {
     this.#clock = options.clock;
     this.#logger = options.logger.child({ component: "reconciler" });
     this.#onFinding = options.onFinding;
+    this.#seenCapacity = options.seenCapacity ?? 10_000;
   }
 
   /** Findings so far, most severe first. */
@@ -106,6 +118,11 @@ export class Reconciler {
     const key = observationKey(order);
     if (this.#seen.has(key)) return undefined;
     this.#seen.add(key);
+    if (this.#seen.size > this.#seenCapacity) {
+      // Sets iterate in insertion order, so the first key is the oldest.
+      const oldest = this.#seen.values().next();
+      if (!oldest.done) this.#seen.delete(oldest.value);
+    }
 
     this.#observed++;
     this.#lastObservedAtMs = this.#clock.now();

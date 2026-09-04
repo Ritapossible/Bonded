@@ -179,6 +179,32 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   );
 
   server.registerTool(
+    "cancel_order",
+    {
+      title: "Cancel an open order",
+      description:
+        "Cancel an order previously placed through BONDED, by its client order id. " +
+        "Cancellation is always permitted: an agent that can open a position must be " +
+        "able to close it, and refusing to cancel would leave exposure the mandate " +
+        "cannot reduce.",
+      inputSchema: {
+        symbol: z.string().describe("Trading pair, e.g. ETHUSDT"),
+        clientOrderId: z
+          .string()
+          .describe("The id returned by place_order, e.g. bnd_a1b2c3d4_7_0123456789ab"),
+      },
+    },
+    async (args: { symbol: string; clientOrderId: string }) => {
+      const outcome = await engine.cancelOrder(args.symbol.toUpperCase(), args.clientOrderId);
+      if (!outcome.ok) {
+        logger.warn({ error: outcome.error.toJSON() }, "cancel_order failed");
+        return errorResult({ status: "ERROR", ...outcome.error.toJSON() });
+      }
+      return jsonResult({ status: "CANCELLED", exchangeResponse: outcome.value });
+    },
+  );
+
+  server.registerTool(
     "get_mandate_summary",
     {
       title: "List the mandate's clauses",

@@ -102,6 +102,11 @@ class StubExchange {
         return body({ canTrade: true, balances: [{ asset: "USDT", free: "10000", locked: "0" }] });
       case "/api/v3/ticker/price":
         return body({ symbol: "ETHUSDT", price: "2000" });
+      case "/api/v3/myTrades":
+        // No fills: realised PnL is zero and the loss clauses do not bind. The route
+        // must exist regardless — a missing trade history leaves the PnL snapshot
+        // stale, and the gate correctly denies rather than guessing.
+        return body([]);
       case "/api/v3/order":
         return body(this.orderResponse, this.orderStatus);
       default:
@@ -153,6 +158,7 @@ beforeEach(async () => {
     clock,
     logger,
     runtimeEnv: "testnet",
+    isAuditPathHealthy: () => true,
   });
 });
 
@@ -252,6 +258,7 @@ describe("TradingEngine", () => {
       clock,
       logger: createSilentLogger(),
       runtimeEnv: "testnet",
+      isAuditPathHealthy: () => true,
     });
 
     await scoped.placeOrder(ALLOWED);

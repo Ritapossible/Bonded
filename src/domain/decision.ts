@@ -30,6 +30,8 @@ export const ClauseId = {
   MAX_OPEN_ORDERS: "maxOpenOrders",
   TRADING_WINDOW: "tradingWindowUtc",
   DAILY_LOSS_LIMIT: "dailyLossLimitUsd",
+  MAX_DRAWDOWN: "maxDrawdownPct",
+  AUDIT_PATH: "auditPath",
   ACCOUNT_TRADING_DISABLED: "accountTradingDisabled",
   STATE_FRESHNESS: "stateFreshness",
 } as const;
