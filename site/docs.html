@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Documentation — BONDED</title>
+    <meta
+      name="description"
+      content="Install, configure and operate BONDED: mandate schema, gate clauses, MCP tool reference, reconciliation outcomes and boot guards."
+    />
+    <meta name="theme-color" content="#0B0E11" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F0B90B'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Helvetica,Arial,sans-serif' font-size='20' font-weight='700' fill='%230B0E11'%3EB%3C/text%3E%3C/svg%3E"
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <header class="header">
+      <div class="header__pill">
+        <a class="brand" href="index.html">BOND<span>ED</span></a>
+        <nav class="header__nav">
+          <a href="index.html#how">How it works</a>
+          <a href="index.html#reconciliation">Reconciliation</a>
+          <a href="docs.html">Docs</a>
+        </nav>
+        <a
+          class="icon-btn"
+          href="https://github.com/Ritapossible/Bonded"
+          aria-label="View BONDED on GitHub"
+        >
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+            />
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <div class="shell docs">
+      <!-- --------------------------------------------------------- sidebar -->
+      <aside class="sidebar">
+        <nav id="toc">
+          <h4>Getting started</h4>
+          <a href="#overview">Overview</a>
+          <a href="#requirements">Requirements</a>
+          <a href="#install">Install</a>
+          <a href="#configuration">Configuration</a>
+          <a href="#connect">Connect an agent</a>
+
+          <h4>Concepts</h4>
+          <a href="#mandate">Mandate</a>
+          <a href="#clauses">Gate clauses</a>
+          <a href="#pnl">Realised PnL</a>
+          <a href="#reconciliation">Reconciliation</a>
+          <a href="#audit-log">Audit log</a>
+
+          <h4>Reference</h4>
+          <a href="#tools">MCP tools</a>
+          <a href="#boot-guards">Boot guards</a>
+          <a href="#console">Console</a>
+          <a href="#exit-codes">Exit codes</a>
+
+          <h4>Operating</h4>
+          <a href="#limits">Limits</a>
+          <a href="#development">Development</a>
+        </nav>
+      </aside>
+
+      <!-- ------------------------------------------------------------ body -->
+      <article class="doc">
+        <h1>Documentation</h1>
+        <p>
+          BONDED is a mandate gate and reconciliation layer between an AI agent and a Binance Spot
+          account. This page covers installation, the mandate schema, the tool contract and how to
+          operate it.
+        </p>
+
+        <h2 id="overview">Overview</h2>
+        <p>
+          The agent holds no Binance credential. Its entire capability is the four MCP tools below,
+          so the bound is structural rather than advisory. Every order is evaluated against a
+          mandate before it is sent, and every order that reaches the exchange is reconciled against
+          what BONDED actually authorised.
+        </p>
+        <p>Three components, in the order an order passes through them:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Responsibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Gate</td>
+              <td>
+                Pure evaluation of an order against the mandate. No I/O, fails closed, names the
+                clause that refused.
+              </td>
+            </tr>
+            <tr>
+              <td>Audit log</td>
+              <td>
+                Append-only, hash-chained record of every decision, <code>fsync</code>'d before the
+                order is sent.
+              </td>
+            </tr>
+            <tr>
+              <td>Reconciler</td>
+              <td>
+                Compares the exchange's order history against the audit log. Disagreement burns the
+                bond.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 id="requirements">Requirements</h2>
+        <ul>
+          <li>Node.js 22 or later</li>
+          <li>
+            Binance Spot Testnet API key and secret —
+            <a href="https://testnet.binance.vision">testnet.binance.vision</a>
+          </li>
+          <li>An MCP-capable agent: Claude Code, Codex, Cursor, OpenClaw</li>
+        </ul>
+        <p>No system binaries, no root, no database. Runtime state is two files on disk.</p>
+
+        <h2 id="install">Install</h2>
+        <pre><code>git clone https://github.com/Ritapossible/Bonded
+cd Bonded
+npm install
+npm run build</code></pre>
+
+        <h2 id="configuration">Configuration</h2>
+        <p>
+          Copy <code>.env.example</code> to <code>.env</code> and fill it in. Configuration is
+          validated once at startup — a missing value fails immediately with the field named, rather
+          than at the first order.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Default</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>BINANCE_API_KEY</code></td>
+              <td>—</td>
+              <td>Required. Spot Testnet key.</td>
+            </tr>
+            <tr>
+              <td><code>BINANCE_SECRET_KEY</code></td>
+              <td>—</td>
+              <td>
+                Required. Never logged; wrapped so interpolation yields <code>[redacted]</code>.
+              </td>
+            </tr>
+            <tr>
+              <td><code>BONDED_HMAC_SECRET</code></td>
+              <td>—</td>
+              <td>
+                Required, 32+ chars. Stamps authorised orders so a bypass is detectable. Generate
+                with <code>openssl rand -hex 32</code>.
+              </td>
+            </tr>
+            <tr>
+              <td><code>BINANCE_API_ENV</code></td>
+              <td><code>testnet</code></td>
+              <td><code>testnet</code> or <code>prod</code>.</td>
+            </tr>
+            <tr>
+              <td><code>BONDED_ALLOW_PROD</code></td>
+              <td><code>0</code></td>
+              <td>Must be <code>1</code> for production. A misconfiguration fails at boot.</td>
+            </tr>
+            <tr>
+              <td><code>BINANCE_SPOT_BASE_PATH</code></td>
+              <td><code>https://testnet.binance.vision</code></td>
+              <td>REST base URL.</td>
+            </tr>
+            <tr>
+              <td><code>BINANCE_STREAM_BASE_PATH</code></td>
+              <td><code>wss://stream.testnet.binance.vision/ws</code></td>
+              <td>User data stream endpoint.</td>
+            </tr>
+            <tr>
+              <td><code>BONDED_MANDATE_PATH</code></td>
+              <td><code>./data/mandate.json</code></td>
+              <td>Mandate location.</td>
+            </tr>
+            <tr>
+              <td><code>BONDED_DECISION_LOG_PATH</code></td>
+              <td><code>./data/decisions.jsonl</code></td>
+              <td>Hash-chained audit log.</td>
+            </tr>
+            <tr>
+              <td><code>BONDED_POLL_INTERVAL_MS</code></td>
+              <td><code>15000</code></td>
+              <td>Reconciliation backstop interval.</td>
+            </tr>
+            <tr>
+              <td><code>BONDED_CONSOLE_PORT</code></td>
+              <td><code>7391</code></td>
+              <td>Owner console. <code>0</code> disables it. Always loopback.</td>
+            </tr>
+            <tr>
+              <td><code>BONDED_LOG_LEVEL</code></td>
+              <td><code>info</code></td>
+              <td><code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note note--warn">
+          <p>
+            <strong>Disable withdrawals on the API key.</strong> BONDED does not implement a
+            withdrawal guard — it verifies the exchange enforces one, which survives BONDED being
+            wrong about everything else. On testnet that check cannot run, and the guard reports
+            <code>WARN</code> rather than claiming a pass.
+          </p>
+        </div>
+
+        <h2 id="connect">Connect an agent</h2>
+        <pre><code>claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
+        <p>
+          BONDED speaks MCP over stdio. All logging goes to stderr — stdout carries the JSON-RPC
+          frames, and a single stray line there would corrupt the transport.
+        </p>
+
+        <h2 id="mandate">Mandate</h2>
+        <p>
+          The complete statement of what the agent may do. It is data, not code: compiled once,
+          validated, grounded against live <code>exchangeInfo</code>, then hashed. The
+          <code>mandateHash</code> is stamped into every audit record, so a record always cites one
+          exact ruleset.
+        </p>
+
+        <pre><code>{
+  "version": 1,
+  "env": "testnet",
+  "symbols": ["BTCUSDT", "ETHUSDT"],
+  "orderTypes": ["LIMIT", "MARKET"],
+  "sides": ["BUY", "SELL"],
+  "maxNotionalUsd": "500",
+  "maxOpenOrders": 3,
+  "dailyLossLimitUsd": "50",
+  "maxDrawdownPct": "5",
+  "tradingWindowUtc": ["00:00", "23:59"],
+  "expiresAt": "2026-09-08T23:59:00.000Z"
+}</code></pre>
+
+        <p>
+          All fractional values are decimal <strong>strings</strong>, matching Binance's own
+          convention — a float loses precision that a limit check depends on. Only counts and the
+          version are numbers.
+        </p>
+
+        <div class="note">
+          <p>
+            An unrecognised key is a hard error, not an ignored field. A typo'd clause name must
+            fail loudly: otherwise the operator believes a limit is in force while nothing enforces
+            it.
+          </p>
+        </div>
+
+        <h2 id="clauses">Gate clauses</h2>
+        <p>
+          Seventeen clauses, evaluated in a fixed order. The first denial wins, so the clause an
+          operator sees is the most fundamental one the order breached. Every clause lives in a
+          single file, so the whole enforcement surface is auditable at once.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Clause</th>
+              <th>Denies when</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>environment</code></td>
+              <td>The mandate's env differs from the runtime env.</td>
+            </tr>
+            <tr>
+              <td><code>scope</code></td>
+              <td>Trade scope has been revoked by a finding.</td>
+            </tr>
+            <tr>
+              <td><code>auditPath</code></td>
+              <td>No order source is delivering — reconciliation is blind.</td>
+            </tr>
+            <tr>
+              <td><code>expiry</code></td>
+              <td>The mandate has expired.</td>
+            </tr>
+            <tr>
+              <td><code>symbolAllowlist</code></td>
+              <td>The symbol is outside the allowlist or unresolvable.</td>
+            </tr>
+            <tr>
+              <td><code>symbolTradable</code></td>
+              <td>The symbol is not currently trading.</td>
+            </tr>
+            <tr>
+              <td><code>orderType</code></td>
+              <td>The order type is not permitted.</td>
+            </tr>
+            <tr>
+              <td><code>side</code></td>
+              <td>The side is not permitted.</td>
+            </tr>
+            <tr>
+              <td><code>tradingWindowUtc</code></td>
+              <td>Outside the mandate's UTC window.</td>
+            </tr>
+            <tr>
+              <td><code>accountTradingDisabled</code></td>
+              <td>The exchange account cannot trade.</td>
+            </tr>
+            <tr>
+              <td><code>maxOpenOrders</code></td>
+              <td>The open-order limit is already reached.</td>
+            </tr>
+            <tr>
+              <td><code>priceFilter</code></td>
+              <td>Price breaches tick size or price bounds.</td>
+            </tr>
+            <tr>
+              <td><code>lotSize</code></td>
+              <td>Quantity breaches step size or quantity bounds.</td>
+            </tr>
+            <tr>
+              <td><code>minNotional</code></td>
+              <td>Notional is below the symbol's minimum.</td>
+            </tr>
+            <tr>
+              <td><code>maxNotionalUsd</code></td>
+              <td>Notional exceeds the mandate's maximum.</td>
+            </tr>
+            <tr>
+              <td><code>dailyLossLimitUsd</code></td>
+              <td>The day's realised loss reaches the absolute cap.</td>
+            </tr>
+            <tr>
+              <td><code>maxDrawdownPct</code></td>
+              <td>The day's realised loss reaches the proportional cap.</td>
+            </tr>
+            <tr>
+              <td><code>referencePrice</code></td>
+              <td>A base-sized market order has no live price to bound it.</td>
+            </tr>
+            <tr>
+              <td><code>stateFreshness</code></td>
+              <td>Exchange state is stale or timestamped in the future.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>
+          <strong>Fail closed.</strong> Anything the gate cannot evaluate is a denial, never a pass.
+          An outage must not silently convert a bounded mandate into an unbounded one.
+        </p>
+
+        <h2 id="pnl">Realised PnL</h2>
+        <p>
+          Both loss clauses compare against realised PnL computed with an
+          <strong>average cost basis per symbol</strong>, walking Binance's own trade history in
+          chronological order. A buy moves the average cost; a sell realises
+          <code>(price − averageCost) × quantity</code>. Quote-asset commission is subtracted;
+          base-asset commission reduces the quantity acquired.
+        </p>
+        <p>
+          <code>dailyLossLimitUsd</code> is absolute. <code>maxDrawdownPct</code> is the same loss
+          as a percentage of the account's quote-asset balance. Whichever is tighter fires first.
+        </p>
+
+        <div class="note">
+          <p>
+            A position opened before the seven-day basis window has no known cost. Selling it
+            realises an unknown amount, so that quantity is <strong>excluded and reported</strong>
+            rather than guessed at. The figure therefore understates activity; it never overstates
+            it.
+          </p>
+        </div>
+
+        <h2 id="reconciliation">Reconciliation</h2>
+        <p>
+          The gate only sees orders that pass through it. Anything holding the API key can go around
+          it, and the gate is blind to that by construction — so BONDED keeps a second, independent
+          account of reality and treats disagreement as the finding.
+        </p>
+        <p>
+          Every authorised order is stamped with a client order id of the form
+          <code>bnd_&lt;mandateHash8&gt;_&lt;seq&gt;_&lt;hmac&gt;</code>. Knowing the format is not
+          enough to mint one without the secret.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Outcome</th>
+              <th>Meaning</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>AUTHORISED</code></td>
+              <td>Executed exactly as authorised.</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td><code>MISMATCHED</code></td>
+              <td>Authorised, but not for the order that executed.</td>
+              <td>Bond burns</td>
+            </tr>
+            <tr>
+              <td><code>FOREIGN</code></td>
+              <td>No BONDED identifier. A plain bypass.</td>
+              <td>Bond burns</td>
+            </tr>
+            <tr>
+              <td><code>FORGED</code></td>
+              <td>Wears the namespace without a valid tag.</td>
+              <td>Bond burns</td>
+            </tr>
+            <tr>
+              <td><code>UNKNOWN_AUTHENTIC</code></td>
+              <td>Valid tag, no matching record.</td>
+              <td>Bond burns</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>Findings carry four things, not one:</p>
+        <ol>
+          <li>A plain explanation</li>
+          <li>The verbatim exchange payload</li>
+          <li>A Binance <code>orderId</code>, checkable without trusting BONDED</li>
+          <li>An explicit list of what could <strong>not</strong> be determined</li>
+        </ol>
+
+        <p>
+          Two overlapping sources feed it: the user data stream for near-instant detection, and a
+          polling backstop that is a hard startup dependency. Seeing an order twice costs nothing;
+          seeing it zero times is the failure this exists to prevent.
+        </p>
+
+        <h2 id="audit-log">Audit log</h2>
+        <p>
+          Every decision — allows as well as denials — is appended to a hash-chained JSONL file and
+          <code>fsync</code>'d <strong>before</strong> the order is sent. That ordering is the
+          safety argument: an order can never carry an authorisation a crash could erase.
+        </p>
+        <p>
+          Each record carries the SHA-256 of the previous record's canonical form. Altering or
+          removing any record breaks every link after it. This does not stop an operator rewriting
+          the whole file — that needs an external anchor — but it makes a <em>silent</em> edit
+          impossible, which is the realistic threat.
+        </p>
+
+        <h2 id="tools">MCP tools</h2>
+
+        <h3><code>place_order</code></h3>
+        <p>Submit a Spot order for evaluation.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>symbol</code></td>
+              <td>string</td>
+              <td>Required. e.g. <code>ETHUSDT</code></td>
+            </tr>
+            <tr>
+              <td><code>side</code></td>
+              <td><code>BUY</code> | <code>SELL</code></td>
+              <td>Required.</td>
+            </tr>
+            <tr>
+              <td><code>type</code></td>
+              <td><code>LIMIT</code> | <code>MARKET</code></td>
+              <td>Required.</td>
+            </tr>
+            <tr>
+              <td><code>quantity</code></td>
+              <td>string</td>
+              <td>Base asset. Required for <code>LIMIT</code>.</td>
+            </tr>
+            <tr>
+              <td><code>price</code></td>
+              <td>string</td>
+              <td>Required for <code>LIMIT</code>.</td>
+            </tr>
+            <tr>
+              <td><code>quoteOrderQty</code></td>
+              <td>string</td>
+              <td>Quote asset. <code>MARKET</code> only, never with <code>quantity</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>Returns <code>PLACED</code>, <code>DENIED</code> or <code>FAILED</code>. A denial:</p>
+        <pre><code>{
+  "status": "DENIED",
+  "seq": 412,
+  "clause": "maxNotionalUsd",
+  "clauseText": "Order notional must not exceed the mandate's maximum.",
+  "observed": "900",
+  "limit": "500"
+}</code></pre>
+
+        <p><strong>A denial is a successful tool call, not an error.</strong> Three rules:</p>
+        <ol>
+          <li>
+            <strong>Do not retry the same order.</strong> The mandate will not change between
+            attempts.
+          </li>
+          <li>
+            <strong>Read <code>clause</code> and adjust.</strong> It names exactly what to change.
+          </li>
+          <li>
+            <strong><code>clause: "scope"</code> means stop.</strong> The bond has burned. Report it
+            rather than working around it.
+          </li>
+        </ol>
+
+        <h3><code>check_order</code></h3>
+        <p>
+          Same input as <code>place_order</code>. Evaluates without contacting the exchange and
+          without consuming an audit-log entry. Returns <code>WOULD_ALLOW</code> or
+          <code>WOULD_DENY</code>.
+        </p>
+
+        <h3><code>cancel_order</code></h3>
+        <p>
+          Takes <code>symbol</code> and <code>clientOrderId</code>. <strong>Never refused.</strong>
+          Every clause exists to limit exposure and cancelling only reduces it — a gate able to
+          refuse a cancellation could trap an agent in a position it is not allowed to close.
+        </p>
+
+        <h3><code>get_mandate_summary</code></h3>
+        <p>
+          Returns the mandate hash, expiry, clause <strong>names</strong> and scope status.
+          Thresholds are deliberately withheld: an agent that can read its limits can shape its
+          behaviour to sit exactly inside them. The agent learns the rules by being refused, and
+          each refusal reports the limit for that clause.
+        </p>
+
+        <h3><code>get_account</code></h3>
+        <p>
+          Balances and open-order count as most recently observed, with the observation timestamp so
+          staleness is visible.
+        </p>
+
+        <h2 id="boot-guards">Boot guards</h2>
+        <p>
+          BONDED refuses to start unless the guarantees it advertises are in place, and prints what
+          each guard actually verified. A guard that cannot perform its check reports
+          <code>WARN</code> and says what it checked instead — it never claims a pass it did not
+          earn.
+        </p>
+
+        <pre><code>BONDED boot guards
+  [PASS] environment           testnet confirmed, base URL https://testnet.binance.vision
+  [PASS] mandate               mandate ed1ff01a valid until 2026-09-08T23:59:00.000Z
+  [WARN] withdrawalPermission  not verified: apiRestrictions is unavailable on Spot Testnet
+  [PASS] decisionLog           chain verified over 128 records, head 4f2ab910
+  [PASS] clockSkew             clock within 42 ms of exchange
+  [PASS] symbolGrounding       2 symbols resolved from exchangeInfo
+  [PASS] authorisationIndex    128 prior authorisations replayed
+  [PASS] auditPath             order history reconciled every 15000 ms</code></pre>
+
+        <h2 id="console">Console</h2>
+        <p>
+          A read-only owner view at <code>http://127.0.0.1:7391</code>, pushed over SSE. Shows the
+          bond state, the mandate's thresholds, reconciliation counters, findings and a live
+          decision feed.
+        </p>
+        <ul>
+          <li>
+            <strong>Loopback only.</strong> Never <code>0.0.0.0</code> — the payload carries
+            balances and order history.
+          </li>
+          <li>
+            <strong>Read-only.</strong> Every method but <code>GET</code> returns 405, so a
+            compromised tab cannot become a trading capability.
+          </li>
+          <li><strong>No credentials</strong> reach the view model.</li>
+        </ul>
+        <p>
+          Unlike the agent's view, the console <em>does</em> show thresholds. The owner wrote them;
+          hiding them would be theatre.
+        </p>
+
+        <h2 id="exit-codes">Exit codes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>0</code></td>
+              <td>Clean shutdown.</td>
+            </tr>
+            <tr>
+              <td><code>1</code></td>
+              <td>A boot guard failed. The banner names which.</td>
+            </tr>
+            <tr>
+              <td><code>70</code></td>
+              <td>Uncaught exception or unhandled rejection. The audit log is flushed first.</td>
+            </tr>
+            <tr>
+              <td><code>78</code></td>
+              <td>Invalid configuration. The failing fields are listed.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 id="limits">Limits</h2>
+        <p>
+          Every one of these is a real weakness. They are here because a security design that does
+          not name its own limits has not been examined.
+        </p>
+
+        <h3>The bound rests on key custody</h3>
+        <p>
+          BONDED is not a TEE and not a ZK circuit. It holds the credential and the agent does not,
+          which makes the bound structural — but compromise the host and the bound is gone.
+        </p>
+
+        <h3>Reconciliation detects; it does not prevent</h3>
+        <p>
+          A bypass order reaches the exchange and fills before BONDED sees it. What is guaranteed is
+          that it will not go unnoticed: attributed, bond burned, scope revoked.
+        </p>
+
+        <h3>It audits compliance, not quality</h3>
+        <p>
+          The gate can prove an order was inside the mandate. It has no opinion on whether the trade
+          was sensible, and cannot acquire one.
+        </p>
+
+        <h3>The withdrawal guarantee is not verifiable on testnet</h3>
+        <p>
+          <code>GET /sapi/v1/account/apiRestrictions</code> does not exist on Spot Testnet, so the
+          guard reports <code>WARN</code> and states that it asserted the environment instead.
+        </p>
+
+        <h3>The gate is only as good as the mandate</h3>
+        <p>
+          A mandate that compiles to weaker rules than intended fails silently. The mitigations are
+          human: clauses render as numbered text before anything runs, and an unrecognised clause
+          name is a hard error.
+        </p>
+
+        <h3>Testnet fills are not real fills</h3>
+        <p>
+          Testnet liquidity does not resemble production. No PnL figure produced there means
+          anything.
+        </p>
+
+        <h3>The stream is a single point of failure</h3>
+        <p>
+          A dropped socket blinds real-time detection. The polling backstop is a hard startup
+          dependency for exactly this reason, but a mid-session loss degrades detection to one
+          polling interval until it reconnects.
+        </p>
+
+        <div class="note note--warn">
+          <p>
+            <strong>The live testnet round trip has not been run.</strong> Development took place in
+            an environment Binance geo-blocks, so signing, order placement and the user data stream
+            are covered by tests against a stubbed exchange rather than a real one. The listen-key
+            flow in particular is unverified.
+          </p>
+        </div>
+
+        <h2 id="development">Development</h2>
+        <pre><code>npm run check      # typecheck, lint, format, tests
+npm test           # 147 tests
+npm run build      # compile to dist/</code></pre>
+        <p>
+          The gate is a pure function, so it is tested exhaustively without mocks. The Binance
+          client is tested against a scripted <code>fetch</code>, including that the signature
+          covers exactly the string sent and that order placement is never retried. CI runs the full
+          gate plus a check that the published entry point resolves.
+        </p>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <div class="shell">
+        <div class="footer__row">
+          <p>
+            BONDED — a mandate gate and reconciliation layer between AI agents and Binance Spot. MIT
+            licensed.
+          </p>
+          <nav class="footer__links">
+            <a href="index.html">Home</a>
+            <a href="https://github.com/Ritapossible/Bonded">GitHub</a>
+          </nav>
+        </div>
+        <p class="footer__legal">
+          Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
+          advice — BONDED enforces limits and produces no trading recommendations.
+        </p>
+      </div>
+    </footer>
+
+    <script>
+      // Highlight the section currently in view. Plain IntersectionObserver: a docs page
+      // should not need a framework, and this one has no build step to hide one in.
+      (function () {
+        "use strict";
+        var links = Array.prototype.slice.call(document.querySelectorAll("#toc a"));
+        var byId = {};
+        links.forEach(function (link) {
+          byId[link.getAttribute("href").slice(1)] = link;
+        });
+
+        var headings = links
+          .map(function (link) {
+            return document.getElementById(link.getAttribute("href").slice(1));
+          })
+          .filter(Boolean);
+
+        if (!("IntersectionObserver" in window) || headings.length === 0) return;
+
+        var visible = new Set();
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting) visible.add(entry.target.id);
+              else visible.delete(entry.target.id);
+            });
+            // The topmost visible heading wins, so scrolling up and down agree.
+            for (var i = 0; i < headings.length; i++) {
+              if (visible.has(headings[i].id)) {
+                links.forEach(function (l) {
+                  l.classList.remove("is-active");
+                });
+                byId[headings[i].id].classList.add("is-active");
+                break;
+              }
+            }
+          },
+          { rootMargin: "-90px 0px -70% 0px" },
+        );
+
+        headings.forEach(function (heading) {
+          observer.observe(heading);
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BONDED — a mandate gate for AI agents trading Binance</title>
+    <meta
+      name="description"
+      content="An AI agent trading a Binance account gets no credential, only a mandate. Every executed order is reconciled against what was actually authorised."
+    />
+    <meta name="theme-color" content="#0B0E11" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F0B90B'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Helvetica,Arial,sans-serif' font-size='20' font-weight='700' fill='%230B0E11'%3EB%3C/text%3E%3C/svg%3E"
+    />
+
+    <meta property="og:title" content="BONDED" />
+    <meta
+      property="og:description"
+      content="Going around it is possible. Going around it unnoticed is not."
+    />
+    <meta property="og:type" content="website" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <header class="header">
+      <div class="header__pill">
+        <a class="brand" href="/">BOND<span>ED</span></a>
+        <nav class="header__nav">
+          <a href="#how">How it works</a>
+          <a href="#reconciliation">Reconciliation</a>
+          <a href="#limits">Limits</a>
+          <a href="docs.html">Docs</a>
+        </nav>
+        <a
+          class="icon-btn"
+          href="https://github.com/Ritapossible/Bonded"
+          aria-label="View BONDED on GitHub"
+        >
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+            />
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <!-- ------------------------------------------------------------ hero -->
+      <section class="hero">
+        <div class="hero__shafts" aria-hidden="true"></div>
+        <div class="shell">
+          <span class="badge">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 2 3.5 5.5v6c0 5 3.6 9.6 8.5 10.5 4.9-.9 8.5-5.5 8.5-10.5v-6L12 2Z"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Binance Agent OS · Trading Workflows
+          </span>
+
+          <h1>
+            <span class="line">Going around it is possible.</span>
+            <span class="line">Unnoticed is not.</span>
+          </h1>
+
+          <p class="hero__sub">
+            An AI agent trading your Binance account gets no credential — only a mandate. Every
+            order that reaches the exchange is reconciled against what was actually authorised, so
+            an order the gate never approved is
+            <strong>detected, attributed, and stops trading</strong>.
+          </p>
+
+          <div class="cta">
+            <a class="btn btn--primary" href="https://github.com/Ritapossible/Bonded">
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                />
+              </svg>
+              View on GitHub
+            </a>
+            <a class="btn btn--ghost" href="docs.html">Read the docs</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------- two paths -->
+      <section id="problem">
+        <div class="shell">
+          <div class="section-head">
+            <span class="eyebrow">The gap</span>
+            <h2>Binance guarded one path. Agents use the other.</h2>
+            <p>
+              Agent OS offers two ways for an agent to trade an account, and only one of them has a
+              human in it.
+            </p>
+          </div>
+
+          <div class="paths">
+            <article class="path">
+              <span class="path__state">Guarded</span>
+              <h3>MCP Server</h3>
+              <p>Binance already fences this path, thoroughly.</p>
+              <ul>
+                <li>Runs inside a dedicated Agentic sub-account</li>
+                <li>Withdrawal scope never available</li>
+                <li>Every trade confirmed by you first</li>
+              </ul>
+            </article>
+
+            <article class="path path--open">
+              <span class="path__state">Unguarded</span>
+              <h3>Skills Hub &amp; binance-cli</h3>
+              <p>Takes raw API keys. This is the path that runs unattended.</p>
+              <ul>
+                <li>Raw <code>BINANCE_API_KEY</code> and secret</li>
+                <li>No confirmation step</li>
+                <li>No sub-account isolation</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- how it works -->
+      <section id="how">
+        <div class="shell">
+          <div class="section-head">
+            <span class="eyebrow">How it works</span>
+            <h2>Three parts, and only one of them is new.</h2>
+            <p>
+              A gate is table stakes. Reconciling against the exchange's own record is the part
+              nobody else builds.
+            </p>
+          </div>
+
+          <div class="steps">
+            <article class="step">
+              <div class="step__n">01</div>
+              <div>
+                <h3>Mandate</h3>
+                <p>
+                  Symbol allowlist, max notional, leverage ceiling, loss limits, trading window,
+                  expiry. Validated, grounded against live <code>exchangeInfo</code>, then hashed —
+                  so every audit record cites one exact ruleset and the rules cannot be widened
+                  behind the trail.
+                </p>
+              </div>
+              <svg
+                class="step__icon"
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M7 3h7l5 5v13H7V3Z"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                />
+                <path d="M14 3v5h5M9.5 13h7M9.5 17h5" stroke="currentColor" stroke-width="1.6" />
+              </svg>
+            </article>
+
+            <article class="step">
+              <div class="step__n">02</div>
+              <div>
+                <h3>Gate</h3>
+                <p>
+                  A pure function of mandate, order and exchange state — no I/O, no clock reads.
+                  Seventeen clauses in a fixed order, failing closed on anything it cannot evaluate.
+                  Denials name the clause that fired, so an agent corrects itself instead of
+                  retrying blindly.
+                </p>
+              </div>
+              <svg
+                class="step__icon"
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <rect
+                  x="4"
+                  y="10"
+                  width="16"
+                  height="11"
+                  rx="2"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                />
+                <path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6" />
+              </svg>
+            </article>
+
+            <article class="step">
+              <div class="step__n">03</div>
+              <div>
+                <h3>Reconcile</h3>
+                <p>
+                  The gate is blind to anything that goes around it. So BONDED keeps a second,
+                  independent account of reality — Binance's own order history — and treats
+                  disagreement as the finding. Anything it never authorised burns the bond and
+                  revokes trade scope.
+                </p>
+              </div>
+              <svg
+                class="step__icon"
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M4 8h13l-3-3M20 16H7l3 3"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------- reconciliation -->
+      <section id="reconciliation">
+        <div class="shell">
+          <div class="section-head">
+            <span class="eyebrow">Reconciliation</span>
+            <h2>Five outcomes, and the differences matter.</h2>
+            <p>Anything but the first burns the bond and stops trading.</p>
+          </div>
+
+          <div class="outcomes">
+            <div class="outcome outcome--ok">
+              <span class="outcome__tag">AUTHORISED</span>
+              <p>Executed exactly as authorised.</p>
+            </div>
+            <div class="outcome">
+              <span class="outcome__tag">MISMATCHED</span>
+              <p>Authorised — but the order that executed is not the one authorised.</p>
+            </div>
+            <div class="outcome">
+              <span class="outcome__tag">FOREIGN</span>
+              <p>No BONDED identifier at all. A plain bypass.</p>
+            </div>
+            <div class="outcome">
+              <span class="outcome__tag">FORGED</span>
+              <p>
+                Wears BONDED's namespace without a valid tag — worse than foreign, because it is an
+                attempt to look authorised.
+              </p>
+            </div>
+            <div class="outcome">
+              <span class="outcome__tag">UNKNOWN_AUTHENTIC</span>
+              <p>Valid tag, no matching record. A log-integrity problem.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------ brief card -->
+      <section>
+        <div class="shell">
+          <div class="brief">
+            <div class="brief__rings" aria-hidden="true"></div>
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 2 3.5 5.5v6c0 5 3.6 9.6 8.5 10.5 4.9-.9 8.5-5.5 8.5-10.5v-6L12 2Z"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+              />
+              <path
+                d="m8.5 12 2.5 2.5 4.5-4.5"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <h2>Built on Agent OS</h2>
+            <p>
+              Remove Binance and there is nothing to guard. Every surface BONDED uses is one Agent
+              OS shipped.
+            </p>
+
+            <div class="brief__grid">
+              <div class="brief__item">
+                <strong>Spot REST</strong>
+                <span>Signed orders, account state, filters</span>
+              </div>
+              <div class="brief__item">
+                <strong>User data stream</strong>
+                <span>Real-time execution reports</span>
+              </div>
+              <div class="brief__item">
+                <strong>Skills Hub</strong>
+                <span>Packaged as an installable skill</span>
+              </div>
+              <div class="brief__item">
+                <strong>MCP</strong>
+                <span>Framework-agnostic agent surface</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- limits -->
+      <section id="limits">
+        <div class="shell">
+          <div class="section-head">
+            <span class="eyebrow">Honest limits</span>
+            <h2>What it does not do.</h2>
+            <p>
+              A security design that does not name its own limits has not been examined. The full
+              list is in the docs.
+            </p>
+          </div>
+
+          <div class="limits">
+            <article class="limit">
+              <h3>It is not a TEE</h3>
+              <p>
+                The bound rests on key custody. Compromise the host and the bound is gone. Middle
+                rung, not the top one.
+              </p>
+            </article>
+            <article class="limit">
+              <h3>Detection, not prevention</h3>
+              <p>
+                A bypass order fills before BONDED sees it. The guarantee is deterrence plus
+                attribution.
+              </p>
+            </article>
+            <article class="limit">
+              <h3>Compliance, not quality</h3>
+              <p>
+                It can prove an order was inside the mandate. It has no opinion on whether the trade
+                was sensible.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="shell">
+        <div class="footer__word">BOND<span>ED</span></div>
+        <div class="footer__row">
+          <p>
+            A mandate gate and reconciliation layer between AI agents and Binance Spot. Built for
+            the Binance Agent OS Mini Hackathon, Track A.
+          </p>
+          <nav class="footer__links">
+            <a href="docs.html">Docs</a>
+            <a href="https://github.com/Ritapossible/Bonded">GitHub</a>
+            <a href="docs.html#limits">Limits</a>
+          </nav>
+        </div>
+        <p class="footer__legal">
+          Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
+          advice — BONDED enforces limits and produces no trading recommendations. MIT licensed.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

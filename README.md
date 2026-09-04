@@ -176,6 +176,7 @@ them, because an agent that can read its limits can sit exactly inside them.
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Three planes, enforcement layers, data flows, invariants |
 | [MEMORY.md](./MEMORY.md) | Verified research, decisions and why, dead ends, open questions |
 | [SKILL.md](./SKILL.md) | Binance Skills Hub package — tool contract, and how an agent should behave when denied |
+| [site/](./site) | Static landing page and documentation site. No build step — open `site/index.html`, or `npx serve site` |
 
 ## Environment
 
