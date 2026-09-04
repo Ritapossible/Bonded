@@ -52,6 +52,23 @@
           <a href="index.html#reconciliation">Reconciliation</a>
           <a href="docs.html">Docs</a>
         </nav>
+        <details class="menu">
+          <summary class="menu__button" aria-label="Open menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M4 7h16M4 12h16M4 17h16"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </summary>
+          <nav class="menu__panel">
+            <a href="index.html#how">How it works</a>
+            <a href="index.html#reconciliation">Reconciliation</a>
+            <a href="docs.html">Docs</a>
+          </nav>
+        </details>
         <a
           class="icon-btn"
           href="https://github.com/Ritapossible/Bonded"
@@ -69,31 +86,34 @@
     <main class="shell docs">
       <!-- --------------------------------------------------------- sidebar -->
       <aside class="sidebar">
-        <nav id="toc">
-          <h4>Getting started</h4>
-          <a href="#overview">Overview</a>
-          <a href="#requirements">Requirements</a>
-          <a href="#install">Install</a>
-          <a href="#configuration">Configuration</a>
-          <a href="#connect">Connect an agent</a>
+        <details class="toc" open>
+          <summary class="toc__summary">On this page</summary>
+          <nav id="toc">
+            <h4>Getting started</h4>
+            <a href="#overview">Overview</a>
+            <a href="#requirements">Requirements</a>
+            <a href="#install">Install</a>
+            <a href="#configuration">Configuration</a>
+            <a href="#connect">Connect an agent</a>
 
-          <h4>Concepts</h4>
-          <a href="#mandate">Mandate</a>
-          <a href="#clauses">Gate clauses</a>
-          <a href="#pnl">Realised PnL</a>
-          <a href="#reconciliation">Reconciliation</a>
-          <a href="#audit-log">Audit log</a>
+            <h4>Concepts</h4>
+            <a href="#mandate">Mandate</a>
+            <a href="#clauses">Gate clauses</a>
+            <a href="#pnl">Realised PnL</a>
+            <a href="#reconciliation">Reconciliation</a>
+            <a href="#audit-log">Audit log</a>
 
-          <h4>Reference</h4>
-          <a href="#tools">MCP tools</a>
-          <a href="#boot-guards">Boot guards</a>
-          <a href="#console">Console</a>
-          <a href="#exit-codes">Exit codes</a>
+            <h4>Reference</h4>
+            <a href="#tools">MCP tools</a>
+            <a href="#boot-guards">Boot guards</a>
+            <a href="#console">Console</a>
+            <a href="#exit-codes">Exit codes</a>
 
-          <h4>Operating</h4>
-          <a href="#limits">Limits</a>
-          <a href="#development">Development</a>
-        </nav>
+            <h4>Operating</h4>
+            <a href="#limits">Limits</a>
+            <a href="#development">Development</a>
+          </nav>
+        </details>
       </aside>
 
       <!-- ------------------------------------------------------------ body -->
@@ -770,5 +790,6 @@ npm run build      # compile to dist/</code></pre>
     </footer>
 
     <script src="docs.js" defer></script>
+    <script src="nav.js" defer></script>
   </body>
 </html>
