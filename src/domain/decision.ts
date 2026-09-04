@@ -49,6 +49,15 @@ export interface Denial {
   readonly limit?: string;
 }
 
+/**
+ * What a record says happened.
+ *
+ * `CANCEL` is not a gate verdict — cancellation is deliberately ungated, since it only
+ * ever reduces exposure — but it is an action taken on the account, so it belongs in the
+ * same chained trail as the decisions.
+ */
+export type DecisionOutcome = "ALLOW" | "DENY" | "CANCEL";
+
 export type Verdict =
   { readonly outcome: "ALLOW" } | { readonly outcome: "DENY"; readonly denial: Denial };
 
@@ -71,13 +80,22 @@ export interface DecisionRecord {
   readonly prevHash: string;
   readonly ts: string;
   readonly mandateHash: string;
-  readonly intent: OrderIntent;
+  /** The order evaluated. Absent on a `CANCEL`, which withdraws an earlier one. */
+  readonly intent?: OrderIntent;
   /** Notional as evaluated, when it could be determined. */
   readonly notionalUsd?: DecimalString;
-  readonly outcome: "ALLOW" | "DENY";
+  readonly outcome: DecisionOutcome;
   readonly denial?: Denial;
   /** Set only on ALLOW: the stamped id the exchange order will carry. */
   readonly clientOrderId?: string;
+  /**
+   * Set only on CANCEL: which order was withdrawn.
+   *
+   * Cancellations are recorded because a log containing a placement and nothing else
+   * describes an open order that no longer exists. The trail has to show the lifecycle,
+   * not just its beginning.
+   */
+  readonly cancel?: { readonly symbol: string; readonly clientOrderId: string };
 }
 
 /** Genesis link for an empty log. */

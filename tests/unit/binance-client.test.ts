@@ -55,7 +55,11 @@ const json = (payload: unknown, status = 200, headers: Record<string, string> = 
     headers: { "content-type": "application/json", ...headers },
   });
 
-function client(fetchImpl: typeof fetch, maxRetries = 0): BinanceClient {
+function client(
+  fetchImpl: typeof fetch,
+  maxRetries = 0,
+  sleep: (ms: number) => Promise<void> = () => Promise.resolve(),
+): BinanceClient {
   return new BinanceClient({
     baseUrl: "https://testnet.binance.vision",
     apiKey: new Secret(API_KEY),
@@ -65,7 +69,7 @@ function client(fetchImpl: typeof fetch, maxRetries = 0): BinanceClient {
     logger: createSilentLogger(),
     fetchImpl,
     maxRetries,
-    sleep: () => Promise.resolve(),
+    sleep,
   });
 }
 
@@ -181,7 +185,7 @@ describe("error mapping", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.error.code).toBe(ErrorCode.EXCHANGE_HTTP);
-    expect(result.error.details["retryAfterSeconds"]).toBe(3);
+    expect(result.error.details["retryAfter"]).toBe("3");
   });
 
   it("handles a non-JSON error body without throwing", async () => {
@@ -252,5 +256,78 @@ describe("query construction", () => {
     await client(fetchImpl).myTrades("ETHUSDT", { fromId: 99, startTime: 1 });
     expect(calls[0]!.url).toContain("fromId=99");
     expect(calls[0]!.url).not.toContain("startTime");
+  });
+});
+
+describe("Retry-After", () => {
+  // The audit's M2. The header was captured into error details and never read, so a
+  // 429 saying "wait 60 seconds" was retried after ~0.5s, 1s and 2s: three rapid
+  // re-violations, which is how a 429 becomes a 418 IP ban.
+  function rateLimited(retryAfter: string | undefined, thenOk: unknown) {
+    let calls = 0;
+    const fetchImpl: typeof fetch = () => {
+      calls += 1;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ code: -1003, msg: "Too many requests" }), {
+            status: 429,
+            headers: retryAfter === undefined ? {} : { "retry-after": retryAfter },
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(thenOk), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    };
+    return fetchImpl;
+  }
+
+  it("waits the number of seconds the exchange asked for", async () => {
+    const slept: number[] = [];
+    const c = client(rateLimited("12", { serverTime: 1 }), 3, (ms) => {
+      slept.push(ms);
+      return Promise.resolve();
+    });
+    await c.serverTime();
+    // 12 seconds, not the ~500ms our own backoff would have chosen.
+    expect(slept).toEqual([12_000]);
+  });
+
+  it("accepts an HTTP-date form of the header", async () => {
+    const slept: number[] = [];
+    const when = new Date(Date.now() + 5_000).toUTCString();
+    const c = client(rateLimited(when, { serverTime: 1 }), 3, (ms) => {
+      slept.push(ms);
+      return Promise.resolve();
+    });
+    await c.serverTime();
+    expect(slept).toHaveLength(1);
+    expect(slept[0]).toBeGreaterThan(1_000);
+    expect(slept[0]).toBeLessThanOrEqual(5_000);
+  });
+
+  it("falls back to its own backoff when the header is absent", async () => {
+    const slept: number[] = [];
+    const c = client(rateLimited(undefined, { serverTime: 1 }), 3, (ms) => {
+      slept.push(ms);
+      return Promise.resolve();
+    });
+    await c.serverTime();
+    expect(slept).toHaveLength(1);
+    expect(slept[0]).toBeLessThan(1_000);
+  });
+
+  it("gives up rather than holding a request open for minutes", async () => {
+    const slept: number[] = [];
+    const c = client(rateLimited("600", { serverTime: 1 }), 3, (ms) => {
+      slept.push(ms);
+      return Promise.resolve();
+    });
+    const result = await c.serverTime();
+    expect(result.ok).toBe(false);
+    expect(slept).toEqual([]);
   });
 });

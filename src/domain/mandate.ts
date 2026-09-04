@@ -178,24 +178,21 @@ function findDuplicate(values: readonly string[]): string | undefined {
  * the thresholds, so it cannot reason about how close it is to a limit or shape its
  * behaviour to sit just inside one.
  */
-export function mandateSummaryForAgent(mandate: Mandate): {
+export function mandateSummaryForAgent(
+  mandate: Mandate,
+  clauses: readonly string[],
+): {
   mandateHash: string;
   clauses: string[];
   expiresAt: string;
 } {
   return {
     mandateHash: mandate.hash,
-    clauses: [
-      "environment",
-      "expiry",
-      "symbolAllowlist",
-      "orderType",
-      "side",
-      "maxNotionalUsd",
-      "maxOpenOrders",
-      "tradingWindowUtc",
-      "exchangeFilters",
-    ],
+    // Passed in rather than listed here. The hand-written list this replaced had drifted
+    // to nine names out of nineteen, omitted `scope` — the one an agent must stop on —
+    // and advertised `exchangeFilters`, which was never a clause id at all, so an agent
+    // could be refused by a name it had been told did not exist.
+    clauses: [...clauses],
     expiresAt: mandate.spec.expiresAt,
   };
 }

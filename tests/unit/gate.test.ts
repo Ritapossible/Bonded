@@ -4,7 +4,7 @@ import { ClauseId } from "../../src/domain/decision.js";
 import type { ExchangeState, SymbolRules } from "../../src/domain/exchange.js";
 import type { OrderIntent } from "../../src/domain/intent.js";
 import { compileMandate, type Mandate, type MandateSpec } from "../../src/domain/mandate.js";
-import { evaluate, type GateInput } from "../../src/gate/gate.js";
+import { CLAUSES, evaluate, type GateInput } from "../../src/gate/gate.js";
 import { unwrap } from "../../src/core/result.js";
 
 const NOW = Date.parse("2026-09-06T12:00:00.000Z");
@@ -298,6 +298,58 @@ describe("gate", () => {
         },
       });
       expectDeny(evaluate(input({ state: losing })), ClauseId.DAILY_LOSS_LIMIT);
+    });
+  });
+
+  describe("which denial wins", () => {
+    // The audit's M3. Symbol resolution and notional derivation ran ahead of every
+    // clause, so an agent whose scope had been revoked could be told `stateFreshness` —
+    // which its instructions say is transient, so retry — when the truth was `scope`,
+    // which means stop and tell the owner.
+    it("reports scope, not stale prices, when both are true", () => {
+      const stalePrices = state({
+        prices: {
+          observedAtMs: NOW - 60_000,
+          prices: new Map([["ETHUSDT", decimalUnsafe("2000")]]),
+        },
+      });
+      const marketOrder: OrderIntent = {
+        kind: "MARKET_BASE",
+        symbol: "ETHUSDT",
+        side: "BUY",
+        quantity: decimalUnsafe("0.1"),
+      };
+      const result = evaluate(
+        input({ intent: marketOrder, state: stalePrices, scopeRevoked: true }),
+      );
+      expectDeny(result, ClauseId.SCOPE);
+    });
+
+    it("reports scope, not an unlisted symbol, when both are true", () => {
+      const unknown: OrderIntent = { ...LIMIT_BUY, symbol: "DOGEUSDT" };
+      expectDeny(evaluate(input({ intent: unknown, scopeRevoked: true })), ClauseId.SCOPE);
+    });
+
+    it("reports a dead audit path ahead of an incidental failure", () => {
+      const unknown: OrderIntent = { ...LIMIT_BUY, symbol: "DOGEUSDT" };
+      expectDeny(
+        evaluate(input({ intent: unknown, auditPathHealthy: false })),
+        ClauseId.AUDIT_PATH,
+      );
+    });
+
+    it("still reports the incidental failure when authority is intact", () => {
+      const unknown: OrderIntent = { ...LIMIT_BUY, symbol: "DOGEUSDT" };
+      expectDeny(evaluate(input({ intent: unknown })), ClauseId.SYMBOL_ALLOWLIST);
+    });
+
+    it("evaluates authority clauses that read no exchange state", () => {
+      // The early pass hands these clauses a context whose derived fields are not yet
+      // computed, so any clause promoted into that set must declare no snapshot needs.
+      const authority = new Set(["environment", "scope", "auditPath", "expiry"]);
+      for (const clause of CLAUSES.filter((c) => authority.has(c.id))) {
+        expect(clause.requires).toEqual([]);
+      }
     });
   });
 

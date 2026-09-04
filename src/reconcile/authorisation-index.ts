@@ -43,7 +43,7 @@ export class AuthorisationIndex {
   /** Index a decision. Denials carry no client order id and are ignored. */
   record(record: DecisionRecord): void {
     if (record.outcome !== "ALLOW") return;
-    if (record.clientOrderId === undefined) return;
+    if (record.clientOrderId === undefined || record.intent === undefined) return;
     this.#byClientOrderId.set(record.clientOrderId, {
       seq: record.seq,
       clientOrderId: record.clientOrderId,

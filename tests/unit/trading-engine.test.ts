@@ -296,6 +296,64 @@ describe("TradingEngine", () => {
     expect(await records()).toHaveLength(0);
   });
 
+  describe("cancellation", () => {
+    // The audit's M1: the code claimed "cancellation is still recorded, so the audit
+    // trail shows the full lifecycle" and wrote nothing but a stderr line. A log holding
+    // a placement and nothing else describes an open order that no longer exists.
+    it("appends a CANCEL record to the chained log", async () => {
+      const placed = await engine.placeOrder(ALLOWED);
+      expect(placed.ok && placed.value.status).toBe("PLACED");
+      const clientOrderId =
+        placed.ok && placed.value.status === "PLACED" ? placed.value.clientOrderId : "";
+
+      await engine.cancelOrder("ETHUSDT", clientOrderId);
+
+      const written = await records();
+      const cancel = written.at(-1);
+      expect(cancel?.outcome).toBe("CANCEL");
+      expect(cancel?.cancel).toEqual({ symbol: "ETHUSDT", clientOrderId });
+      expect(cancel?.intent).toBeUndefined();
+    });
+
+    it("keeps the hash chain intact across a cancellation", async () => {
+      const placed = await engine.placeOrder(ALLOWED);
+      const clientOrderId =
+        placed.ok && placed.value.status === "PLACED" ? placed.value.clientOrderId : "";
+      await engine.cancelOrder("ETHUSDT", clientOrderId);
+      await engine.placeOrder(ALLOWED);
+
+      expect((await verifyChain(logPath)).ok).toBe(true);
+    });
+
+    it("records the cancellation before the request reaches the exchange", async () => {
+      const placed = await engine.placeOrder(ALLOWED);
+      const clientOrderId =
+        placed.ok && placed.value.status === "PLACED" ? placed.value.clientOrderId : "";
+      exchange.unreachable = true;
+
+      const result = await engine.cancelOrder("ETHUSDT", clientOrderId);
+
+      // The exchange refused, and the attempt is still in the trail. A record of an
+      // attempt that failed is accurate; a missing record is not.
+      expect(result.ok).toBe(false);
+      expect((await records()).at(-1)?.outcome).toBe("CANCEL");
+    });
+
+    it("is never refused by the gate, even once scope is revoked", async () => {
+      const placed = await engine.placeOrder(ALLOWED);
+      const clientOrderId =
+        placed.ok && placed.value.status === "PLACED" ? placed.value.clientOrderId : "";
+      engine.revokeScope("test");
+
+      await engine.cancelOrder("ETHUSDT", clientOrderId);
+
+      expect((await records()).at(-1)?.outcome).toBe("CANCEL");
+      // And an order in the same state is refused, so the asymmetry is deliberate.
+      const after = await engine.placeOrder(ALLOWED);
+      expect(after.ok && after.value.status).toBe("DENIED");
+    });
+  });
+
   describe("the open-order cap under load", () => {
     /**
      * The audit's H2. `maxOpenOrders` is an aggregate cap read from an account snapshot

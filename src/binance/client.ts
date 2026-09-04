@@ -21,6 +21,7 @@
  */
 
 import { createHmac } from "node:crypto";
+import { systemClock, type Clock } from "../core/clock.js";
 import type { Secret } from "../config/env.js";
 import { ErrorCode, bondedError, type BondedError } from "../core/errors.js";
 import { err, ok, type Result } from "../core/result.js";
@@ -35,6 +36,8 @@ export interface BinanceClientOptions {
   readonly secretKey: Secret;
   readonly timeoutMs: number;
   readonly recvWindowMs: number;
+  /** Injected so a signed request's timestamp is testable and consistent with the rest. */
+  readonly clock?: Clock;
   readonly logger: Logger;
   /** Injected for tests. Defaults to global fetch. */
   readonly fetchImpl?: typeof fetch;
@@ -76,10 +79,14 @@ export class BinanceClient {
   readonly #secretKey: Secret;
   readonly #timeoutMs: number;
   readonly #recvWindowMs: number;
+  readonly #clock: Clock;
   readonly #logger: Logger;
   readonly #fetch: typeof fetch;
   readonly #maxRetries: number;
   readonly #sleep: (ms: number) => Promise<void>;
+  /** A wait the exchange asked for, consumed by the next attempt. */
+  #nextAttemptDelayMs: number | undefined;
+
   /** Most recent used-weight reading, for backoff decisions and the console. */
   #usedWeight = 0;
 
@@ -89,6 +96,7 @@ export class BinanceClient {
     this.#secretKey = options.secretKey;
     this.#timeoutMs = options.timeoutMs;
     this.#recvWindowMs = options.recvWindowMs;
+    this.#clock = options.clock ?? systemClock;
     this.#logger = options.logger.child({ component: "binance-client" });
     this.#fetch = options.fetchImpl ?? globalThis.fetch;
     this.#maxRetries = options.maxRetries ?? 3;
@@ -115,7 +123,7 @@ export class BinanceClient {
     }
     if (signed) {
       params.append("recvWindow", String(this.#recvWindowMs));
-      params.append("timestamp", String(Date.now()));
+      params.append("timestamp", String(this.#clock.now()));
     }
     const queryString = params.toString();
     if (!signed) return queryString;
@@ -131,7 +139,9 @@ export class BinanceClient {
 
     for (let attempt = 0; attempt <= this.#maxRetries; attempt++) {
       if (attempt > 0) {
-        await this.#sleep(backoffMs(attempt));
+        const honoured = this.#nextAttemptDelayMs;
+        this.#nextAttemptDelayMs = undefined;
+        await this.#sleep(honoured ?? backoffMs(attempt));
       }
 
       const attemptResult = await this.#attempt<T>(options);
@@ -143,8 +153,30 @@ export class BinanceClient {
         options.retryable && isRetryableError(attemptResult.error) && attempt < this.#maxRetries;
       if (!retryable) return attemptResult;
 
+      // Binance says how long to wait; ignoring it and retrying on our own schedule is
+      // how three rapid re-violations turn a 429 into a 418 IP ban — which takes the
+      // audit path down, which halts trading. Its own backoff wins over ours.
+      const retryAfterMs = retryAfterFrom(attemptResult.error);
+      if (retryAfterMs !== undefined) {
+        if (retryAfterMs > MAX_RETRY_AFTER_MS) {
+          // Longer than we are willing to hold a request open. Surface it rather than
+          // sleeping for minutes inside a call the gate is waiting on.
+          this.#logger.warn(
+            { path: options.path, retryAfterMs },
+            "exchange asked for a longer wait than the retry budget; not retrying",
+          );
+          return attemptResult;
+        }
+        this.#nextAttemptDelayMs = retryAfterMs;
+      }
+
       this.#logger.warn(
-        { path: options.path, attempt: attempt + 1, code: attemptResult.error.code },
+        {
+          path: options.path,
+          attempt: attempt + 1,
+          code: attemptResult.error.code,
+          ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+        },
         "retrying Binance request",
       );
     }
@@ -240,7 +272,7 @@ export class BinanceClient {
       status: response.status,
       ...(binanceCode === undefined ? {} : { binanceCode }),
       ...(binanceMessage === undefined ? {} : { binanceMessage }),
-      ...(retryAfter === null ? {} : { retryAfterSeconds: Number(retryAfter) }),
+      ...(retryAfter === null ? {} : { retryAfter }),
     };
 
     // 4xx other than rate limiting means Binance understood and refused: a bad
@@ -481,6 +513,31 @@ function buildTickerQuery(symbols: readonly string[]): Query {
   const [only] = symbols;
   if (symbols.length === 1 && only !== undefined) return { symbol: only };
   return { symbols: JSON.stringify([...symbols]) };
+}
+
+/** Longest `Retry-After` we will wait inside a single call. */
+const MAX_RETRY_AFTER_MS = 30_000;
+
+/**
+ * The wait Binance asked for, in milliseconds.
+ *
+ * `Retry-After` is either delta-seconds or an HTTP date; both are accepted. A value that
+ * is absent, unparseable or in the past yields `undefined`, and the caller falls back to
+ * its own backoff.
+ */
+function retryAfterFrom(error: BondedError): number | undefined {
+  const raw = error.details["retryAfter"];
+  if (typeof raw !== "string") return undefined;
+
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) {
+    return seconds > 0 ? Math.ceil(seconds * 1_000) : undefined;
+  }
+
+  const at = Date.parse(raw);
+  if (Number.isNaN(at)) return undefined;
+  const waitMs = at - Date.now();
+  return waitMs > 0 ? waitMs : undefined;
 }
 
 function isRetryableError(error: BondedError): boolean {

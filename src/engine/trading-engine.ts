@@ -309,13 +309,41 @@ export class TradingEngine {
    * **Deliberately not gated.** Every mandate clause exists to limit exposure, and
    * cancelling only ever reduces it. A gate that could refuse a cancellation would be
    * able to trap an agent in a position it is not allowed to close — the opposite of
-   * what the mandate is for. Cancellation is still recorded, so the audit trail shows
-   * the full lifecycle rather than an order that silently disappears.
+   * what the mandate is for.
+   *
+   * Ungated is not unrecorded. A log holding a placement and nothing else describes an
+   * open order that no longer exists, so the cancellation is appended to the same
+   * chained trail, before the request is sent and whatever the exchange then says. A
+   * record of an attempt that failed is accurate; a missing record is not.
    */
   async cancelOrder(symbol: string, clientOrderId: string): Promise<Result<unknown, BondedError>> {
+    const ts = new Date(this.#clock.now()).toISOString();
+    const mandateHash = this.#mandate.hash;
+
+    const record = await this.#log.appendWith(() =>
+      ok({ ts, mandateHash, outcome: "CANCEL" as const, cancel: { symbol, clientOrderId } }),
+    );
+    if (!record.ok) {
+      // Same rule as the order path: an action the trail cannot describe is one BONDED
+      // does not take.
+      this.#logger.error(
+        { error: record.error.toJSON() },
+        "refusing to cancel: audit write failed",
+      );
+      return record;
+    }
+
+    if (this.#onDecision !== undefined) {
+      try {
+        this.#onDecision(record.value);
+      } catch (cause: unknown) {
+        this.#logger.error({ cause }, "decision subscriber threw");
+      }
+    }
+
     const result = await this.#client.cancelOrder({ symbol, origClientOrderId: clientOrderId });
     this.#logger.info(
-      { symbol, clientOrderId, ok: result.ok },
+      { seq: record.value.seq, symbol, clientOrderId, ok: result.ok },
       result.ok ? "order cancelled" : "cancellation refused by the exchange",
     );
     return result;

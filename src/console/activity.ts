@@ -12,13 +12,23 @@
 
 import type { DecisionRecord } from "../domain/decision.js";
 import { describeIntent } from "../domain/intent.js";
+import type { DecisionOutcome } from "../domain/decision.js";
 import type { Finding } from "../reconcile/classify.js";
+
+/** One line describing what a record did, whichever kind of record it is. */
+function summarise(record: DecisionRecord): string {
+  if (record.intent !== undefined) return describeIntent(record.intent);
+  if (record.cancel !== undefined) {
+    return `CANCEL ${record.cancel.symbol} ${record.cancel.clientOrderId}`;
+  }
+  return "unknown";
+}
 
 export interface DecisionEntry {
   readonly kind: "decision";
   readonly at: string;
   readonly seq: number;
-  readonly outcome: "ALLOW" | "DENY";
+  readonly outcome: DecisionOutcome;
   readonly summary: string;
   readonly clause?: string;
   readonly observed?: string;
@@ -63,7 +73,7 @@ export class ActivityFeed {
       at: record.ts,
       seq: record.seq,
       outcome: record.outcome,
-      summary: describeIntent(record.intent),
+      summary: summarise(record),
       ...(record.denial === undefined
         ? {}
         : {

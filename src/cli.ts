@@ -12,6 +12,7 @@
  * picture in one pass rather than fixing problems one restart at a time.
  */
 
+import { checkQuoteAssets } from "./domain/quote-asset.js";
 import { currentCoverage, describeCoverage, isAuditPathAdequate } from "./reconcile/audit-path.js";
 import { readFile } from "node:fs/promises";
 import { DecisionLog } from "./audit/decision-log.js";
@@ -118,8 +119,16 @@ async function main(): Promise<number> {
     emit(`  [FAIL] symbolGrounding  not listed on the exchange: ${missing.join(", ")}`);
     return 1;
   }
+  // The mandate's limits are denominated in USD. Summing a BTC-quoted notional into a
+  // USD cap does not fail loudly; it silently measures the wrong thing.
+  const quoteAssets = checkQuoteAssets(grounded.value);
+  if (!quoteAssets.ok) {
+    emit(`  [FAIL] quoteAsset       ${quoteAssets.error.message}`);
+    logger.error({ error: quoteAssets.error.toJSON() }, "mandate mixes quote assets");
+    return 1;
+  }
   emit(
-    `  [PASS] symbolGrounding  ${String(grounded.value.size)} symbols resolved from exchangeInfo`,
+    `  [PASS] symbolGrounding  ${String(grounded.value.size)} symbols resolved from exchangeInfo, quoted in ${quoteAssets.value.quoteAssets.join(", ")}`,
   );
 
   const decisionLog = await DecisionLog.open(config.value.decisionLogPath);

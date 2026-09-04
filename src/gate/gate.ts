@@ -458,6 +458,24 @@ export const CLAUSES: readonly Clause[] = [
   },
 ];
 
+/**
+ * The clauses that depend on nothing but the mandate and BONDED's own state.
+ *
+ * They need no symbol rules, no prices and no account snapshot, so they can be — and
+ * must be — evaluated before any of those can fail. Derived from `CLAUSES` rather than
+ * listed again, so a new no-dependency clause cannot be forgotten here.
+ */
+const AUTHORITY_CLAUSE_IDS: ReadonlySet<ClauseId> = new Set([
+  ClauseId.ENVIRONMENT,
+  ClauseId.SCOPE,
+  ClauseId.AUDIT_PATH,
+  ClauseId.EXPIRY,
+]);
+
+const AUTHORITY_CLAUSES: readonly Clause[] = CLAUSES.filter((clause) =>
+  AUTHORITY_CLAUSE_IDS.has(clause.id),
+);
+
 const NEGATIVE_ONE = "-1" as DecimalString;
 
 /** A max of `"0"` means the filter is disabled, matching Binance's convention. */
@@ -520,6 +538,18 @@ function deriveNotional(
  * exactly the failure mode this component exists to prevent.
  */
 export function evaluate(input: GateInput): GateResult {
+  // Authority first, before anything that could fail for an incidental reason.
+  //
+  // Resolving the symbol and deriving a notional can both produce a denial, and both
+  // used to run ahead of every clause. With scope revoked *and* prices stale, the agent
+  // was told `stateFreshness` — which its instructions say is transient, so retry —
+  // when the truth was `scope`, which means stop and tell the owner. The most
+  // fundamental breach has to be the one reported.
+  for (const clause of AUTHORITY_CLAUSES) {
+    const verdict = clause.evaluate(input as GateContext);
+    if (verdict.outcome === "DENY") return { verdict };
+  }
+
   const symbolRules = input.state.symbolRules.get(input.intent.symbol);
   if (symbolRules === undefined) {
     // Ungrounded symbol. The mandate compiler resolves every allowlisted symbol against

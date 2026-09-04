@@ -24,8 +24,25 @@ import { describeUnknownError } from "../core/errors.js";
 import { parsePositiveDecimal } from "../core/money.js";
 import type { OrderIntent } from "../domain/intent.js";
 import { mandateSummaryForAgent } from "../domain/mandate.js";
+import { ClauseId } from "../domain/decision.js";
+import { CLAUSES } from "../gate/gate.js";
 import type { TradingEngine } from "../engine/trading-engine.js";
 import type { Logger } from "../observability/logger.js";
+
+/**
+ * Every clause name an agent may be refused by, taken from the gate itself.
+ *
+ * Derived, never listed. A hand-maintained copy drifts, and a summary that omits a
+ * clause teaches the agent that a refusal it will eventually receive cannot happen.
+ * Names only — the thresholds stay invisible, which is the point of the summary.
+ */
+const AGENT_VISIBLE_CLAUSES: readonly string[] = [
+  ...new Set([
+    ...CLAUSES.map((clause) => clause.id),
+    ClauseId.STATE_FRESHNESS,
+    ClauseId.REFERENCE_PRICE,
+  ]),
+].sort();
 
 export interface McpServerOptions {
   readonly engine: TradingEngine;
@@ -214,7 +231,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
       inputSchema: {},
     },
     () => {
-      const summary = mandateSummaryForAgent(engine.mandate);
+      const summary = mandateSummaryForAgent(engine.mandate, AGENT_VISIBLE_CLAUSES);
       return jsonResult({
         ...summary,
         scopeRevoked: engine.scopeRevoked,
