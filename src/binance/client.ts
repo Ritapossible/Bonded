@@ -156,7 +156,7 @@ export class BinanceClient {
       // Binance says how long to wait; ignoring it and retrying on our own schedule is
       // how three rapid re-violations turn a 429 into a 418 IP ban — which takes the
       // audit path down, which halts trading. Its own backoff wins over ours.
-      const retryAfterMs = retryAfterFrom(attemptResult.error);
+      const retryAfterMs = retryAfterFrom(attemptResult.error, this.#clock.now());
       if (retryAfterMs !== undefined) {
         if (retryAfterMs > MAX_RETRY_AFTER_MS) {
           // Longer than we are willing to hold a request open. Surface it rather than
@@ -525,7 +525,7 @@ const MAX_RETRY_AFTER_MS = 30_000;
  * is absent, unparseable or in the past yields `undefined`, and the caller falls back to
  * its own backoff.
  */
-function retryAfterFrom(error: BondedError): number | undefined {
+function retryAfterFrom(error: BondedError, nowMs: number): number | undefined {
   const raw = error.details["retryAfter"];
   if (typeof raw !== "string") return undefined;
 
@@ -536,7 +536,7 @@ function retryAfterFrom(error: BondedError): number | undefined {
 
   const at = Date.parse(raw);
   if (Number.isNaN(at)) return undefined;
-  const waitMs = at - Date.now();
+  const waitMs = at - nowMs;
   return waitMs > 0 ? waitMs : undefined;
 }
 

@@ -106,6 +106,7 @@ export const CONSOLE_HTML = `<!doctype html>
   .tag.allow { background: rgba(47,191,113,.14); color: var(--ok); }
   .tag.deny  { background: rgba(240,160,32,.14); color: var(--warn); }
   .tag.find  { background: rgba(255,77,79,.16); color: var(--bad); }
+  .tag.info  { background: rgba(255,255,255,.08); color: var(--muted); }
   .why { color: var(--muted); font-size: 13px; margin-top: 3px; }
   .empty { color: var(--muted); padding: 14px 0; }
 </style>
@@ -259,10 +260,12 @@ export const CONSOLE_HTML = `<!doctype html>
         row.append(body);
       } else {
         var allow = entry.outcome === "ALLOW";
-        row.append(el("div", "tag " + (allow ? "allow" : "deny"), entry.outcome));
+        var cancel = entry.outcome === "CANCEL";
+        var tone = allow ? "allow" : cancel ? "info" : "deny";
+        row.append(el("div", "tag " + tone, entry.outcome));
         var cell = el("div");
         cell.append(el("div", null, entry.summary));
-        if (!allow && entry.clause) {
+        if (!allow && !cancel && entry.clause) {
           var detail = entry.clause + " — observed " + entry.observed;
           if (entry.limit) detail += ", limit " + entry.limit;
           cell.append(el("div", "why", detail));

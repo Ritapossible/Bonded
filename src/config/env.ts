@@ -75,7 +75,18 @@ const EnvSchema = z.object({
    * The poll can only ask about symbols it is given. Naming the pairs an account
    * actually holds narrows the blind spot the REST API forces on it.
    */
-  BONDED_WATCH_SYMBOLS: z.string().default(""),
+  BONDED_WATCH_SYMBOLS: z
+    .string()
+    .default("")
+    .refine(
+      (value) =>
+        value
+          .split(",")
+          .map((symbol) => symbol.trim())
+          .filter((symbol) => symbol !== "")
+          .every((symbol) => /^[A-Za-z0-9]{2,20}$/.test(symbol)),
+      "must be a comma-separated list of Binance symbols",
+    ),
   BONDED_HMAC_SECRET: z
     .string()
     .min(32, "must be at least 32 characters; generate with `openssl rand -hex 32`"),
