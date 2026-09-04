@@ -633,7 +633,7 @@ h2 {
 
 .footer {
   border-top: 1px solid var(--line);
-  padding: 64px 0 48px;
+  padding: 72px 0 40px;
 }
 
 .footer__word {
@@ -647,44 +647,67 @@ h2 {
   color: var(--yellow);
 }
 
+/* The blurb takes the wide column; the three link groups share the rest. */
 .footer__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  justify-content: space-between;
-  align-items: end;
-  margin-top: 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+  gap: 40px;
+  margin-top: 40px;
 }
 
-.footer p {
+.footer__blurb {
   margin: 0;
-  max-width: 56ch;
+  max-width: 42ch;
   color: var(--muted);
   font-size: 0.95rem;
 }
 
-.footer__links {
+.footer__col {
   display: flex;
-  gap: 22px;
-  font-size: 0.95rem;
-  color: var(--muted);
+  flex-direction: column;
+  gap: 10px;
 }
 
-.footer__links a:hover {
+.footer__heading {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.footer__col a {
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.footer__col a:hover {
   color: var(--yellow);
 }
 
 /* The rule spans the footer; the text it separates keeps a readable measure. */
 .footer__legal {
-  margin-top: 36px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px 32px;
+  margin-top: 56px;
   padding-top: 24px;
   border-top: 1px solid var(--line);
 }
 
 .footer__legal p {
-  max-width: 76ch;
+  margin: 0;
+  max-width: 78ch;
   font-size: 0.86rem;
+  line-height: 1.55;
   color: #737b88;
+}
+
+.footer__copyright {
+  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------- 404 page */
@@ -1137,19 +1160,29 @@ h2 {
     font-size: 2.6rem;
   }
 
+  /* Two link columns fit a phone; three do not. */
   .footer__row {
-    margin-top: 20px;
-    gap: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px 20px;
+    margin-top: 28px;
+  }
+
+  .footer__blurb {
+    grid-column: 1 / -1;
+    max-width: none;
   }
 
   /* Standalone links need a thumb-sized box; links inside a sentence do not. */
-  .footer__links {
-    gap: 10px;
-    margin-left: -12px;
+  .footer__col {
+    gap: 2px;
   }
 
-  .footer__links a {
-    padding: 10px 12px;
+  .footer__col a {
+    padding: 9px 0;
+  }
+
+  .footer__legal {
+    margin-top: 36px;
   }
 
   .brand {

@@ -80,22 +80,45 @@
     <footer class="footer">
       <div class="shell">
         <div class="footer__word">BOND<span>ED</span></div>
+
         <div class="footer__row">
-          <p>
-            A mandate gate and reconciliation layer between AI agents and Binance Spot. Built for
-            the Binance Agent OS Mini Hackathon, Track A.
+          <p class="footer__blurb">
+            An AI agent trading a Binance Spot account gets no credential of its own, only a
+            mandate. Every order it places is checked against that mandate before it is sent, and
+            reconciled against the exchange's own record after it executes.
           </p>
-          <nav class="footer__links">
-            <a href="/docs">Docs</a>
-            <a href="https://github.com/Ritapossible/Bonded">GitHub</a>
-            <a href="/docs#limits">Limits</a>
+
+          <nav class="footer__col" aria-label="Documentation">
+            <h2 class="footer__heading">Documentation</h2>
+            <a href="/docs#overview">Overview</a>
+            <a href="/docs#install">Install</a>
+            <a href="/docs#configuration">Configuration</a>
+            <a href="/docs#mandate">Writing a mandate</a>
+          </nav>
+
+          <nav class="footer__col" aria-label="Reference">
+            <h2 class="footer__heading">Reference</h2>
+            <a href="/docs#clauses">Gate clauses</a>
+            <a href="/docs#reconciliation">Reconciliation</a>
+            <a href="/docs#tools">MCP tools</a>
+            <a href="/docs#audit-log">Audit log</a>
+          </nav>
+
+          <nav class="footer__col" aria-label="Project">
+            <h2 class="footer__heading">Project</h2>
+            <a href="https://github.com/Ritapossible/Bonded">Source on GitHub</a>
+            <a href="/docs#limits">What it does not do</a>
+            <a href="https://github.com/Ritapossible/Bonded/blob/main/LICENSE">MIT licence</a>
           </nav>
         </div>
+
         <div class="footer__legal">
           <p>
-            Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
-            advice - BONDED enforces limits and produces no trading recommendations. MIT licensed.
+            Runs on Binance Spot Testnet. BONDED enforces the limits an owner sets; it produces no
+            signals, strategies or trading recommendations, and nothing here is financial advice.
+            Not affiliated with or endorsed by Binance.
           </p>
+          <p class="footer__copyright">&copy; 2026 BONDED &middot; MIT licensed</p>
         </div>
       </div>
     </footer>
