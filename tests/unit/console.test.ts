@@ -6,6 +6,7 @@
  * and that a bond burn actually reaches a connected client.
  */
 
+import { request } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FixedClock } from "../../src/core/clock.js";
 import { decimalUnsafe } from "../../src/core/money.js";
@@ -292,5 +293,84 @@ describe("ConsoleServer", () => {
     expect(burned).toContain("bypass detected");
 
     await reader.cancel();
+  });
+});
+
+describe("DNS rebinding", () => {
+  // The audit's M5. Binding to loopback does not stop a page the operator visits from
+  // pointing a name it controls at 127.0.0.1 and reading this origin as same-origin:
+  // balances, order history, and the mandate's thresholds. Only the Host header
+  // distinguishes "someone typed 127.0.0.1" from "a hostile name resolves there".
+  let secured: ConsoleServer;
+  let securedPort = 7600;
+
+  beforeEach(async () => {
+    securedPort += 1;
+    secured = new ConsoleServer({
+      port: securedPort,
+      logger: createSilentLogger(),
+      engine: stubEngine(),
+      reconciler: stubReconciler(),
+      feed: new ActivityFeed(),
+      orderSources: [stubSource("poll", true)],
+      env: "testnet",
+      startedAtMs: new FixedClock(NOW).now(),
+      refreshMs: 1_000,
+    });
+    expect(await secured.start()).toBe(true);
+  });
+
+  afterEach(async () => {
+    await secured.stop();
+  });
+
+  /**
+   * A raw request, because `fetch` treats Host as a forbidden header and silently drops
+   * an override — which would have made these tests pass against the unfixed server.
+   */
+  function get(
+    path: string,
+    host?: string,
+  ): Promise<{ status: number; headers: NodeJS.Dict<string | string[]> }> {
+    return new Promise((resolve, reject) => {
+      const req = request(
+        {
+          host: "127.0.0.1",
+          port: securedPort,
+          path,
+          method: "GET",
+          ...(host === undefined ? {} : { headers: { Host: host } }),
+        },
+        (res) => {
+          res.resume();
+          res.on("end", () => {
+            resolve({ status: res.statusCode ?? 0, headers: res.headers });
+          });
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  it("refuses a request that did not address a loopback name", async () => {
+    const response = await get("/api/state", `attacker.example:${String(securedPort)}`);
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses a loopback name on the wrong port", async () => {
+    const response = await get("/", "127.0.0.1:1");
+    expect(response.status).toBe(403);
+  });
+
+  it.each(["127.0.0.1", "localhost"])("still serves %s", async (name) => {
+    const response = await get("/api/state", `${name}:${String(securedPort)}`);
+    expect(response.status).toBe(200);
+  });
+
+  it("denies framing and declares a content security policy on the page", async () => {
+    const response = await get("/");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
+    expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
   });
 });

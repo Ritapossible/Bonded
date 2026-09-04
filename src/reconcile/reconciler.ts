@@ -39,6 +39,8 @@ export interface ReconcilerOptions {
   readonly onFinding: (finding: Finding) => void;
   /** Maximum orders remembered for de-duplication. Defaults to 10,000. */
   readonly seenCapacity?: number;
+  /** Maximum findings retained. Defaults to 1,000. */
+  readonly findingsCapacity?: number;
 }
 
 export interface ReconcilerStats {
@@ -74,7 +76,20 @@ export class Reconciler {
    * and losing the audit path entirely.
    */
   readonly #seenCapacity: number;
+  /**
+   * Findings so far, capped.
+   *
+   * The de-duplication set was bounded and this was not, which had it backwards: the
+   * unbounded growth happens in exactly the scenario this component exists for, an
+   * attacker looping orders on a compromised account. The first findings are the ones
+   * that matter — the bond burns on the first — so the cap drops the newest rather than
+   * the oldest, and the count of what was dropped is reported rather than hidden.
+   */
   readonly #findings: Finding[] = [];
+  readonly #findingsCapacity: number;
+  #findingsDropped = 0;
+  /** Sorted view, rebuilt only when a finding is added. */
+  #sortedFindings: readonly Finding[] = [];
   #observed = 0;
   #authorised = 0;
   #lastObservedAtMs: number | undefined;
@@ -87,18 +102,29 @@ export class Reconciler {
     this.#logger = options.logger.child({ component: "reconciler" });
     this.#onFinding = options.onFinding;
     this.#seenCapacity = options.seenCapacity ?? 10_000;
+    this.#findingsCapacity = options.findingsCapacity ?? 1_000;
   }
 
-  /** Findings so far, most severe first. */
+  /**
+   * Findings so far, most severe first.
+   *
+   * Memoised. This is read on every console render, and re-sorting a growing array each
+   * time made the cost of watching a compromised account grow with the compromise.
+   */
   get findings(): readonly Finding[] {
-    return [...this.#findings].sort((a, b) => compareSeverity(a.outcome, b.outcome));
+    return this.#sortedFindings;
+  }
+
+  /** Findings discarded because the cap was reached. Zero in every normal run. */
+  get findingsDropped(): number {
+    return this.#findingsDropped;
   }
 
   get stats(): ReconcilerStats {
     return {
       observed: this.#observed,
       authorised: this.#authorised,
-      findings: this.#findings.length,
+      findings: this.#findings.length + this.#findingsDropped,
       lastObservedAtMs: this.#lastObservedAtMs,
     };
   }
@@ -143,7 +169,14 @@ export class Reconciler {
       return finding;
     }
 
-    this.#findings.push(finding);
+    if (this.#findings.length < this.#findingsCapacity) {
+      this.#findings.push(finding);
+      this.#sortedFindings = [...this.#findings].sort((a, b) =>
+        compareSeverity(a.outcome, b.outcome),
+      );
+    } else {
+      this.#findingsDropped++;
+    }
     this.#logger.error(
       {
         outcome: finding.outcome,
@@ -178,7 +211,7 @@ export class Reconciler {
 
   /** Whether any finding has been raised. Once true, it stays true. */
   get compromised(): boolean {
-    return this.#findings.length > 0;
+    return this.#findings.length > 0 || this.#findingsDropped > 0;
   }
 
   /** The most severe outcome seen so far, for the console header. */

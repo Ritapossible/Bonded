@@ -18,7 +18,7 @@ import { z } from "zod";
 import { canonicalHash } from "../core/canonical.js";
 import { parseInstant } from "../core/clock.js";
 import { ErrorCode, bondedError, type BondedError } from "../core/errors.js";
-import { parsePositiveDecimal, type DecimalString } from "../core/money.js";
+import { greaterThan, parsePositiveDecimal, type DecimalString } from "../core/money.js";
 import { err, ok, type Result } from "../core/result.js";
 
 export const ORDER_SIDES = ["BUY", "SELL"] as const;
@@ -28,6 +28,8 @@ export const ORDER_TYPES = ["LIMIT", "MARKET"] as const;
 export type OrderType = (typeof ORDER_TYPES)[number];
 
 /** `HH:MM` in 24-hour UTC. */
+const HUNDRED = "100" as DecimalString;
+
 const TIME_OF_DAY = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /** Uppercase alphanumeric, matching Binance's symbol convention. */
@@ -57,7 +59,17 @@ export const MandateSchema = z
     maxNotionalUsd: decimalString("maxNotionalUsd"),
     maxOpenOrders: z.number().int().min(1).max(100),
     dailyLossLimitUsd: decimalString("dailyLossLimitUsd"),
-    maxDrawdownPct: decimalString("maxDrawdownPct"),
+    // Bounded at 100: a percentage above it can never be reached, which is a silently
+    // disabled clause wearing the appearance of an enabled one.
+    maxDrawdownPct: decimalString("maxDrawdownPct").superRefine((value, ctx) => {
+      const parsed = parsePositiveDecimal(value, "maxDrawdownPct");
+      if (parsed.ok && greaterThan(parsed.value, HUNDRED)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "must not exceed 100, since it is a percentage of the quote balance",
+        });
+      }
+    }),
     tradingWindowUtc: z.tuple([
       z.string().regex(TIME_OF_DAY, "expected HH:MM"),
       z.string().regex(TIME_OF_DAY, "expected HH:MM"),

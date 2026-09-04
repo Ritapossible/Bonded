@@ -30,6 +30,9 @@ export interface ConsoleServerOptions extends ConsoleStateSources {
   readonly refreshMs?: number;
 }
 
+/** Names that address this loopback server. A hostile name that resolves here is not one. */
+const LOOPBACK_NAMES = new Set(["127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"]);
+
 const SSE_HEADERS = {
   "content-type": "text/event-stream; charset=utf-8",
   "cache-control": "no-cache, no-transform",
@@ -109,6 +112,25 @@ export class ConsoleServer {
     return true;
   }
 
+  /**
+   * Whether the `Host` header names this loopback server.
+   *
+   * An allowlist of the two names that resolve here, plus the bound port. Anything else
+   * — including a hostile name that currently resolves to 127.0.0.1 — is refused.
+   */
+  #isLocalHost(host: string | undefined): boolean {
+    if (host === undefined) return false;
+    // Strip the port, allowing for a bracketed IPv6 literal.
+    const match = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(host.trim());
+    if (match === null) return false;
+    const [, rawName, rawPort] = match;
+    if (rawName === undefined) return false;
+    const name = rawName.toLowerCase().replace(/^\[|\]$/g, "");
+    if (!LOOPBACK_NAMES.has(name)) return false;
+    if (rawPort === undefined) return false;
+    return this.#port === undefined || Number(rawPort) === this.#port;
+  }
+
   #handle(req: IncomingMessage, res: ServerResponse): void {
     const url = req.url ?? "/";
 
@@ -118,12 +140,27 @@ export class ConsoleServer {
       return;
     }
 
+    // Binding to loopback does not stop DNS rebinding. Any page the operator visits can
+    // point a name it controls at 127.0.0.1, at which point the browser treats this
+    // origin as same-origin and reads the stream — balances, order history, and the
+    // mandate's thresholds. Only checking the Host header closes that, so a request
+    // that did not address this server by an address that resolves here is refused.
+    if (!this.#isLocalHost(req.headers.host)) {
+      this.#logger.warn({ host: req.headers.host }, "console refused a non-loopback Host header");
+      res.writeHead(403, { "content-type": "text/plain; charset=utf-8" }).end("forbidden");
+      return;
+    }
+
     if (url === "/" || url.startsWith("/?")) {
       res
         .writeHead(200, {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "referrer-policy": "no-referrer",
+          "content-security-policy":
+            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
         })
         .end(CONSOLE_HTML);
       return;

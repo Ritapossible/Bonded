@@ -33,6 +33,26 @@ import { computeRealisedPnl, type Trade } from "../domain/pnl.js";
  */
 const ACCOUNT_MS = STALENESS_BUDGET_MS.account;
 
+/**
+ * Simultaneous `myTrades` requests.
+ *
+ * Enough to keep the refresh well inside its freshness budget, small enough that a
+ * fifty-symbol mandate does not spend its rate-limit weight in one burst.
+ */
+const PNL_FETCH_CONCURRENCY = 5;
+
+/** Binance's per-call maximum for `myTrades`. */
+const TRADE_PAGE_SIZE = 1_000;
+
+/**
+ * Pages fetched per symbol per refresh.
+ *
+ * A bound rather than a full drain: an account with a million trades in the window must
+ * not be able to hold a refresh open indefinitely. Whatever is left is picked up next
+ * pass, since `fromId` resumes where this one stopped.
+ */
+const MAX_TRADE_PAGES = 10;
+
 const REFRESH_MARGIN_MS = 1_000;
 
 /**
@@ -105,6 +125,33 @@ export class StateProvider {
     return ok(this.#symbolRules);
   }
 
+  /**
+   * Run `task` over every symbol with at most `limit` requests in flight.
+   *
+   * Returns the first failure, or `undefined` if all succeeded. Remaining work is not
+   * cancelled — the results are still wanted for the next pass — but the error is what
+   * the caller sees, so a partial refresh never masquerades as a complete one.
+   */
+  async #forEachSymbol(
+    limit: number,
+    task: (symbol: string) => Promise<Result<void, BondedError>>,
+  ): Promise<Result<void, BondedError> | undefined> {
+    const queue = [...this.#symbols];
+    let failure: Result<void, BondedError> | undefined;
+
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const symbol = queue.shift();
+        if (symbol === undefined) return;
+        const result = await task(symbol);
+        if (!result.ok) failure ??= result;
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, worker));
+    return failure;
+  }
+
   /** Deduplicate concurrent refreshes of the same resource. */
   async #once<T>(key: string, run: () => Promise<T>): Promise<T> {
     const existing = this.#inFlight.get(key);
@@ -173,27 +220,48 @@ export class StateProvider {
     return this.#once("pnl", async () => {
       const windowStart = this.#clock.now() - BASIS_WINDOW_MS;
 
-      for (const symbol of this.#symbols) {
-        const lastId = this.#lastTradeId.get(symbol);
-        const raw = await this.#client.myTrades(
-          symbol,
-          lastId === undefined ? { startTime: windowStart } : { fromId: lastId + 1 },
-        );
-        if (!raw.ok) return raw;
-        const parsed = parseTrades(raw.value);
-        if (!parsed.ok) return parsed;
+      // Fetched with bounded concurrency rather than one symbol at a time. Serially,
+      // the schema's fifty-symbol maximum is fifty round trips inside a thirty-second
+      // freshness budget: the snapshot goes stale while it is being built, and the gate
+      // then denies every order for a reason that is entirely self-inflicted.
+      const failure = await this.#forEachSymbol(PNL_FETCH_CONCURRENCY, async (symbol) => {
+        // Paged. `myTrades` caps at 1000 per call, so a busy account's first pass would
+        // otherwise stop a thousand trades in and leave the cost basis incomplete for
+        // however many refreshes it took to catch up — understating the day's loss for
+        // exactly as long.
+        const fetched: Trade[] = [];
+        for (let page = 0; page < MAX_TRADE_PAGES; page++) {
+          const lastId = this.#lastTradeId.get(symbol);
+          const raw = await this.#client.myTrades(
+            symbol,
+            lastId === undefined
+              ? { startTime: windowStart, limit: TRADE_PAGE_SIZE }
+              : { fromId: lastId + 1, limit: TRADE_PAGE_SIZE },
+          );
+          if (!raw.ok) return raw;
+          const parsed = parseTrades(raw.value);
+          if (!parsed.ok) return parsed;
+
+          fetched.push(...parsed.value);
+          for (const trade of parsed.value) {
+            const highest = this.#lastTradeId.get(symbol);
+            if (highest === undefined || trade.id > highest) {
+              this.#lastTradeId.set(symbol, trade.id);
+            }
+          }
+
+          // A short page is the last page.
+          if (parsed.value.length < TRADE_PAGE_SIZE) break;
+        }
 
         const existing = this.#trades.get(symbol) ?? [];
         // Drop trades that have aged out of the basis window, so memory is bounded by
         // the window rather than by uptime.
-        const merged = [...existing, ...parsed.value].filter((t) => t.timeMs >= windowStart);
+        const merged = [...existing, ...fetched].filter((t) => t.timeMs >= windowStart);
         this.#trades.set(symbol, merged);
-
-        for (const trade of parsed.value) {
-          const highest = this.#lastTradeId.get(symbol);
-          if (highest === undefined || trade.id > highest) this.#lastTradeId.set(symbol, trade.id);
-        }
-      }
+        return ok(undefined);
+      });
+      if (failure !== undefined) return failure;
 
       const quoteAssets = new Set([...this.#symbolRules.values()].map((rules) => rules.quoteAsset));
       const allTrades = [...this.#trades.values()].flat();

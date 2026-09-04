@@ -301,6 +301,19 @@ describe("gate", () => {
     });
   });
 
+  describe("mandate validation", () => {
+    it("rejects a drawdown percentage above 100", () => {
+      // The audit's L2. "500" could never be reached, so the clause was disabled while
+      // looking enabled.
+      const result = compileMandate({ ...BASE_SPEC, maxDrawdownPct: "500" });
+      expect(result.ok).toBe(false);
+    });
+
+    it("accepts exactly 100", () => {
+      expect(compileMandate({ ...BASE_SPEC, maxDrawdownPct: "100" }).ok).toBe(true);
+    });
+  });
+
   describe("which denial wins", () => {
     // The audit's M3. Symbol resolution and notional derivation ran ahead of every
     // clause, so an agent whose scope had been revoked could be told `stateFreshness` —
