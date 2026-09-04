@@ -3,14 +3,14 @@
 Adds `bonded`, a skill that places Binance Spot orders through a **mandate gate** and
 reconciles every executed order against what was actually authorised.
 
-The agent holds no Binance credential — its entire capability is the skill's four tools, so
+The agent holds no Binance credential — its entire capability is the skill's five tools, so
 the bound is structural rather than advisory. Each order returns either `PLACED` with a
 stamped client order id, or `DENIED` naming the exact mandate clause it breached.
 
 The skill does not decide what to trade. It produces no signals, strategies or
 recommendations; it enforces limits an owner wrote and reports what it refused and why.
 
-Source: <https://github.com/Ritapossible/Bonded> — MIT, 109 tests, typecheck and lint clean.
+Source: <https://github.com/Ritapossible/Bonded> — MIT, 147 tests, typecheck and lint clean.
 
 # APIs Used
 
