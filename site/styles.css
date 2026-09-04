@@ -707,7 +707,7 @@ h2 {
 }
 
 .footer__copyright {
-  white-space: nowrap;
+  text-align: right;
 }
 
 /* -------------------------------------------------------------- 404 page */
