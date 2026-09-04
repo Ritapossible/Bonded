@@ -6,7 +6,7 @@
 
   // The docs table of contents ships open, so it is correct on a desktop and correct
   // with no JavaScript. On a phone it is twenty links above the first paragraph, so
-  // collapse it here — the one place we know the viewport.
+  // collapse it here - the one place we know the viewport.
   var toc = document.querySelector("details.toc");
   if (toc && window.matchMedia("(max-width: 900px)").matches) toc.open = false;
 

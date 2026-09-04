@@ -3,7 +3,7 @@
  *
  * Palette is Binance's own: #F0B90B on #0B0E11 / #181A20, with #EAECEF and #848E9C for
  * text and #0ECB81 / #F6465D for the states the exchange itself uses for up and down.
- * Nothing here is invented — an interface for a Binance tool should look like it belongs
+ * Nothing here is invented - an interface for a Binance tool should look like it belongs
  * next to one.
  */
 
@@ -834,7 +834,7 @@ h2 {
 }
 
 /* A table wider than the column scrolls inside itself. The page never scrolls
-   sideways, at any width — that is what the wrapper is for. */
+   sideways, at any width - that is what the wrapper is for. */
 .table-scroll {
   margin: 20px 0;
   overflow-x: auto;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Documentation — BONDED</title>
+    <title>Documentation - BONDED</title>
     <meta
       name="description"
       content="Install, configure and operate BONDED: mandate schema, gate clauses, MCP tool reference, reconciliation outcomes and boot guards."
@@ -19,7 +19,7 @@
     <meta property="og:site_name" content="BONDED" />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="__SITE_URL__/docs" />
-    <meta property="og:title" content="Documentation — BONDED" />
+    <meta property="og:title" content="Documentation - BONDED" />
     <meta
       property="og:description"
       content="Install, configure and operate BONDED: mandate schema, gate clauses, MCP tool reference, reconciliation outcomes and boot guards."
@@ -29,7 +29,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="BONDED — going around it is possible, unnoticed is not."
+      content="BONDED - going around it is possible, unnoticed is not."
     />
     <meta name="twitter:card" content="summary_large_image" />
 
@@ -171,7 +171,7 @@
         <ul>
           <li>Node.js 22 or later</li>
           <li>
-            Binance Spot Testnet API key and secret —
+            Binance Spot Testnet API key and secret -
             <a href="https://testnet.binance.vision">testnet.binance.vision</a>
           </li>
           <li>An MCP-capable agent: Claude Code, Codex, Cursor, OpenClaw</li>
@@ -187,7 +187,7 @@ npm run build</code></pre>
         <h2 id="configuration">Configuration</h2>
         <p>
           Copy <code>.env.example</code> to <code>.env</code> and fill it in. Configuration is
-          validated once at startup — a missing value fails immediately with the field named, rather
+          validated once at startup - a missing value fails immediately with the field named, rather
           than at the first order.
         </p>
 
@@ -203,19 +203,19 @@ npm run build</code></pre>
             <tbody>
               <tr>
                 <td><code>BINANCE_API_KEY</code></td>
-                <td>—</td>
+                <td>-</td>
                 <td>Required. Spot Testnet key.</td>
               </tr>
               <tr>
                 <td><code>BINANCE_SECRET_KEY</code></td>
-                <td>—</td>
+                <td>-</td>
                 <td>
                   Required. Never logged; wrapped so interpolation yields <code>[redacted]</code>.
                 </td>
               </tr>
               <tr>
                 <td><code>BONDED_HMAC_SECRET</code></td>
-                <td>—</td>
+                <td>-</td>
                 <td>
                   Required, 32+ chars. Stamps authorised orders so a bypass is detectable. Generate
                   with <code>openssl rand -hex 32</code>.
@@ -275,7 +275,7 @@ npm run build</code></pre>
         <div class="note note--warn">
           <p>
             <strong>Disable withdrawals on the API key.</strong> BONDED does not implement a
-            withdrawal guard — it verifies the exchange enforces one, which survives BONDED being
+            withdrawal guard - it verifies the exchange enforces one, which survives BONDED being
             wrong about everything else. On testnet that check cannot run, and the guard reports
             <code>WARN</code> rather than claiming a pass.
           </p>
@@ -284,7 +284,7 @@ npm run build</code></pre>
         <h2 id="connect">Connect an agent</h2>
         <pre><code>claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
         <p>
-          BONDED speaks MCP over stdio. All logging goes to stderr — stdout carries the JSON-RPC
+          BONDED speaks MCP over stdio. All logging goes to stderr - stdout carries the JSON-RPC
           frames, and a single stray line there would corrupt the transport.
         </p>
 
@@ -312,7 +312,7 @@ npm run build</code></pre>
 
         <p>
           All fractional values are decimal <strong>strings</strong>, matching Binance's own
-          convention — a float loses precision that a limit check depends on. Only counts and the
+          convention - a float loses precision that a limit check depends on. Only counts and the
           version are numbers.
         </p>
 
@@ -350,7 +350,7 @@ npm run build</code></pre>
               </tr>
               <tr>
                 <td><code>auditPath</code></td>
-                <td>No order source is delivering — reconciliation is blind.</td>
+                <td>No order source is delivering - reconciliation is blind.</td>
               </tr>
               <tr>
                 <td><code>expiry</code></td>
@@ -450,7 +450,7 @@ npm run build</code></pre>
         <h2 id="reconciliation">Reconciliation</h2>
         <p>
           The gate only sees orders that pass through it. Anything holding the API key can go around
-          it, and the gate is blind to that by construction — so BONDED keeps a second, independent
+          it, and the gate is blind to that by construction - so BONDED keeps a second, independent
           account of reality and treats disagreement as the finding.
         </p>
         <p>
@@ -472,7 +472,7 @@ npm run build</code></pre>
               <tr>
                 <td><code>AUTHORISED</code></td>
                 <td>Executed exactly as authorised.</td>
-                <td>—</td>
+                <td>-</td>
               </tr>
               <tr>
                 <td><code>MISMATCHED</code></td>
@@ -514,14 +514,14 @@ npm run build</code></pre>
 
         <h2 id="audit-log">Audit log</h2>
         <p>
-          Every decision — allows as well as denials — is appended to a hash-chained JSONL file and
+          Every decision - allows as well as denials - is appended to a hash-chained JSONL file and
           <code>fsync</code>'d <strong>before</strong> the order is sent. That ordering is the
           safety argument: an order can never carry an authorisation a crash could erase.
         </p>
         <p>
           Each record carries the SHA-256 of the previous record's canonical form. Altering or
           removing any record breaks every link after it. This does not stop an operator rewriting
-          the whole file — that needs an external anchor — but it makes a <em>silent</em> edit
+          the whole file - that needs an external anchor - but it makes a <em>silent</em> edit
           impossible, which is the realistic threat.
         </p>
 
@@ -608,7 +608,7 @@ npm run build</code></pre>
         <h3><code>cancel_order</code></h3>
         <p>
           Takes <code>symbol</code> and <code>clientOrderId</code>. <strong>Never refused.</strong>
-          Every clause exists to limit exposure and cancelling only reduces it — a gate able to
+          Every clause exists to limit exposure and cancelling only reduces it - a gate able to
           refuse a cancellation could trap an agent in a position it is not allowed to close.
         </p>
 
@@ -630,7 +630,7 @@ npm run build</code></pre>
         <p>
           BONDED refuses to start unless the guarantees it advertises are in place, and prints what
           each guard actually verified. A guard that cannot perform its check reports
-          <code>WARN</code> and says what it checked instead — it never claims a pass it did not
+          <code>WARN</code> and says what it checked instead - it never claims a pass it did not
           earn.
         </p>
 
@@ -652,7 +652,7 @@ npm run build</code></pre>
         </p>
         <ul>
           <li>
-            <strong>Loopback only.</strong> Never <code>0.0.0.0</code> — the payload carries
+            <strong>Loopback only.</strong> Never <code>0.0.0.0</code> - the payload carries
             balances and order history.
           </li>
           <li>
@@ -705,7 +705,7 @@ npm run build</code></pre>
         <h3>The bound rests on key custody</h3>
         <p>
           BONDED is not a TEE and not a ZK circuit. It holds the credential and the agent does not,
-          which makes the bound structural — but compromise the host and the bound is gone.
+          which makes the bound structural - but compromise the host and the bound is gone.
         </p>
 
         <h3>Reconciliation detects; it does not prevent</h3>
@@ -772,7 +772,7 @@ npm run build      # compile to dist/</code></pre>
       <div class="shell">
         <div class="footer__row">
           <p>
-            BONDED — a mandate gate and reconciliation layer between AI agents and Binance Spot. MIT
+            BONDED - a mandate gate and reconciliation layer between AI agents and Binance Spot. MIT
             licensed.
           </p>
           <nav class="footer__links">
@@ -783,7 +783,7 @@ npm run build      # compile to dist/</code></pre>
         <div class="footer__legal">
           <p>
             Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
-            advice — BONDED enforces limits and produces no trading recommendations.
+            advice - BONDED enforces limits and produces no trading recommendations.
           </p>
         </div>
       </div>
