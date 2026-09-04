@@ -1,0 +1,17 @@
+# The deployment is the static site in site/, built by scripts/build-site.mjs.
+# Nothing else belongs in the build context — and a file that is never uploaded
+# cannot be mistaken for configuration.
+
+# .env.example lists BINANCE_API_KEY and BINANCE_SECRET_KEY. Those are for the
+# machine running the BONDED server, never for a static site host.
+.env
+.env.*
+
+src
+tests
+data
+dist
+dist-site
+node_modules
+.github
+coverage
