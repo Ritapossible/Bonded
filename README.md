@@ -116,11 +116,35 @@ unrecognised clause name is a hard error rather than an ignored key.
 Testnet liquidity does not resemble production. No PnL figure produced here means anything,
 and none is presented as if it does.
 
-### The user data stream is a single point of failure
+### Detection is only as wide as the stream
 
-A dropped socket blinds real-time detection. The polling backstop is a hard startup
-dependency for exactly this reason — no audit path, no trading — but a mid-session stream
-loss degrades detection from near-instant to one polling interval until it reconnects.
+`GET /api/v3/allOrders` requires a symbol — there is no account-wide REST listing — so the
+polling backstop only ever sees the symbols it was given. **The user data stream is the
+only account-wide source.** With it down, an order on a symbol the mandate never named
+cannot be observed at all.
+
+BONDED treats that as a loss of the audit path rather than a degraded one: without an
+account-wide source, trading stops. `BONDED_ALLOW_PARTIAL_AUDIT=1` accepts symbol-scoped
+coverage and keeps trading, and the boot banner says which of the two is in force.
+`BONDED_WATCH_SYMBOLS` widens the poller beyond the mandate's own symbols.
+
+A mid-session stream loss that still leaves the poller healthy degrades detection from
+near-instant to one polling interval, for the symbols the poller covers.
+
+### Aggregate limits bind against a snapshot, not against the exchange's clock
+
+The order path is serialised, and orders placed since the current account observation
+count toward `maxOpenOrders`, so a burst cannot slip several orders through one stale
+count. That closes the concurrency hole; it does not make the caps instantaneous.
+
+`dailyLossLimitUsd` and `maxDrawdownPct` compare against **realised** PnL derived from
+trade history that is refreshed on a 30-second budget. A loss is only realised when a
+position closes, and BONDED learns of it when the snapshot refreshes. So a fast sequence
+of losing trades can breach a loss limit and keep trading until the next refresh sees it.
+This is inherent to enforcing a limit against an exchange that fills orders without
+asking, and it is a lag, not a hole: the cap binds as soon as the loss is observable.
+
+Positions that stay open are not counted at all — that is what "realised" means.
 
 ### What has not been exercised against a live exchange
 

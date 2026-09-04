@@ -92,7 +92,8 @@ limit check depends on.
 Cancellation is **always permitted**, deliberately. Every mandate clause exists to limit
 exposure, and cancelling only ever reduces it — a gate able to refuse a cancellation could
 trap an agent in a position it is not allowed to close, which is the opposite of what the
-mandate is for.
+mandate is for. Ungated is not unrecorded: each cancellation is appended to the same
+hash-chained log as the decisions, so the trail shows the whole lifecycle.
 
 ## How to behave when an order is denied
 
@@ -129,6 +130,9 @@ agent that can read its limits can shape its behaviour to sit exactly inside the
 is the behaviour the mandate exists to make visible. You learn the rules by being refused,
 one clause at a time — and each refusal tells you the limit for that clause.
 
+The names are derived from the gate itself, so every clause you can be refused by is one
+the summary lists. There are nineteen.
+
 ## What BONDED does not protect against
 
 Worth knowing, because overstating it would be worse than not having it:
@@ -139,6 +143,13 @@ Worth knowing, because overstating it would be worse than not having it:
   you a permitted trade was unwise.
 - **Preventing a bypass.** Reconciliation *detects*; a bypass order fills before BONDED
   sees it. The guarantee is deterrence plus attribution, not prevention.
+- **Seeing every symbol without the stream.** Binance's REST order history needs a symbol,
+  so the polling backstop only covers the symbols it was given. The account-wide user data
+  stream closes that gap, and without it BONDED stops trading rather than claiming a
+  coverage it does not have.
+- **Instantaneous loss limits.** The loss caps compare against realised PnL refreshed on a
+  30-second budget, so a fast sequence of losing trades can breach one and keep trading
+  until the next refresh observes it.
 - **Withdrawals.** Not BONDED's job — that is enforced at the exchange, on the API key
   itself. BONDED verifies at boot that it is, and refuses to run otherwise.
 

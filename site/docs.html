@@ -232,9 +232,28 @@ npm run build</code></pre>
                 <td>Must be <code>1</code> for production. A misconfiguration fails at boot.</td>
               </tr>
               <tr>
+                <td><code>BONDED_ALLOW_PARTIAL_AUDIT</code></td>
+                <td><code>0</code></td>
+                <td>
+                  Permit trading when only symbol-scoped observation is live. See
+                  <a href="#limits">Limits</a>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>BONDED_WATCH_SYMBOLS</code></td>
+                <td>empty</td>
+                <td>
+                  Extra symbols the polling backstop watches, comma separated, beyond the mandate's
+                  own.
+                </td>
+              </tr>
+              <tr>
                 <td><code>BINANCE_SPOT_BASE_PATH</code></td>
                 <td><code>https://testnet.binance.vision</code></td>
-                <td>REST base URL.</td>
+                <td>
+                  REST base URL. Validated against an allowlist of Binance hostnames and must match
+                  <code>BINANCE_API_ENV</code>.
+                </td>
               </tr>
               <tr>
                 <td><code>BINANCE_STREAM_BASE_PATH</code></td>
@@ -326,9 +345,13 @@ npm run build</code></pre>
 
         <h2 id="clauses">Gate clauses</h2>
         <p>
-          Seventeen clauses, evaluated in a fixed order. The first denial wins, so the clause an
-          operator sees is the most fundamental one the order breached. Every clause lives in a
-          single file, so the whole enforcement surface is auditable at once.
+          Seventeen clauses evaluated in a fixed order, plus two denials raised before them when the
+          gate cannot evaluate an order at all - nineteen names in total, all listed below. The four
+          that read nothing but the mandate and BONDED's own state (<code>environment</code>,
+          <code>scope</code>, <code>auditPath</code>, <code>expiry</code>) are evaluated first, so a
+          revoked scope is never reported as a stale snapshot. After those, the first denial wins.
+          Every clause lives in a single file, so the whole enforcement surface is auditable at
+          once.
         </p>
 
         <div class="table-scroll">
@@ -739,11 +762,34 @@ npm run build</code></pre>
           anything.
         </p>
 
-        <h3>The stream is a single point of failure</h3>
+        <h3>Detection is only as wide as the stream</h3>
         <p>
-          A dropped socket blinds real-time detection. The polling backstop is a hard startup
-          dependency for exactly this reason, but a mid-session loss degrades detection to one
-          polling interval until it reconnects.
+          <code>GET /api/v3/allOrders</code> requires a symbol - there is no account-wide REST
+          listing - so the polling backstop only ever sees the symbols it was given. The user data
+          stream is the only account-wide source, and with it down an order on a symbol the mandate
+          never named cannot be observed at all.
+        </p>
+        <p>
+          BONDED treats that as a loss of the audit path rather than a degraded one: without an
+          account-wide source, trading stops. <code>BONDED_ALLOW_PARTIAL_AUDIT=1</code> accepts
+          symbol-scoped coverage and keeps trading, and the boot banner says which is in force.
+          <code>BONDED_WATCH_SYMBOLS</code> widens the poller beyond the mandate's own symbols.
+        </p>
+
+        <h3>Aggregate limits bind against a snapshot, not the exchange's clock</h3>
+        <p>
+          The order path is serialised, and orders placed since the current account observation
+          count toward <code>maxOpenOrders</code>, so a burst cannot slip several orders through one
+          stale count. That closes the concurrency hole; it does not make the caps instantaneous.
+        </p>
+        <p>
+          The loss limits compare against <strong>realised</strong> PnL refreshed on a 30-second
+          budget. A loss is realised when a position closes, and BONDED learns of it at the next
+          refresh, so a fast sequence of losing trades can breach a limit and keep trading until
+          that refresh sees it. This is a lag rather than a hole - the cap binds as soon as the loss
+          is observable - and it is inherent to enforcing a limit against an exchange that fills
+          orders without asking. Open positions are not counted at all; that is what "realised"
+          means.
         </p>
 
         <div class="note note--warn">
