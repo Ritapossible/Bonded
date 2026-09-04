@@ -304,7 +304,10 @@ describe("TradingEngine", () => {
      * to need it.
      */
     async function engineWithCap(maxOpenOrders: number): Promise<TradingEngine> {
-      const log = unwrap(await DecisionLog.open(join(dir, `cap-${String(maxOpenOrders)}.jsonl`)), "open cap log");
+      const log = unwrap(
+        await DecisionLog.open(join(dir, `cap-${String(maxOpenOrders)}.jsonl`)),
+        "open cap log",
+      );
       capLogs.push(log);
       const client = new BinanceClient({
         baseUrl: "https://testnet.binance.vision",
