@@ -12,6 +12,7 @@
  * picture in one pass rather than fixing problems one restart at a time.
  */
 
+import { currentCoverage, describeCoverage, isAuditPathAdequate } from "./reconcile/audit-path.js";
 import { readFile } from "node:fs/promises";
 import { DecisionLog } from "./audit/decision-log.js";
 import { BinanceClient } from "./binance/client.js";
@@ -170,8 +171,10 @@ async function main(): Promise<number> {
     clock: systemClock,
     logger,
     runtimeEnv: config.value.binance.env,
-    // Either source delivering is enough; they overlap deliberately.
-    isAuditPathHealthy: () => sources.some((source) => source.healthy),
+    // Not "any source is alive" — that treated the symbol-scoped poller as equivalent
+    // to the account-wide stream, and it is not. See `reconcile/audit-path.ts`.
+    isAuditPathHealthy: () =>
+      isAuditPathAdequate({ sources, allowPartialCoverage: config.value.allowPartialAudit }),
     onDecision: (record) => {
       reconciler.authorise(record);
       feed.recordDecision(record);
@@ -182,11 +185,14 @@ async function main(): Promise<number> {
   // The polling backstop is a hard startup dependency: no audit path, no trading. Its
   // first pass runs synchronously here, so a failure surfaces as a refusal to start
   // rather than as silent blindness later.
+  const pollSymbols = [...new Set([...mandate.spec.symbols, ...config.value.watchSymbols])];
   const poller = new PollingOrderSource({
     client,
     clock: systemClock,
     logger,
-    symbols: mandate.spec.symbols,
+    // The mandate's symbols plus anything the operator named. `allOrders` needs a
+    // symbol, so every pair not listed here is outside the poller's reach.
+    symbols: pollSymbols,
     intervalMs: config.value.pollIntervalMs,
   });
   sources.push(poller);
@@ -198,12 +204,12 @@ async function main(): Promise<number> {
     return 1;
   }
   emit(
-    `  [PASS] auditPath           order history reconciled every ${String(config.value.pollIntervalMs)} ms`,
+    `  [PASS] auditPath           ${String(pollSymbols.length)} symbols polled every ${String(config.value.pollIntervalMs)} ms`,
   );
 
-  // The stream is what makes detection near-instant. It is best-effort at startup —
-  // the poller already guarantees an audit path — but its absence is stated, never
-  // silently tolerated.
+  // The stream is the only account-wide source, so it is what makes the detection claim
+  // hold for symbols the mandate never named. Without it, coverage is symbol-scoped and
+  // trading stops unless the operator has explicitly accepted that.
   const stream = new UserDataStreamSource({
     client,
     clock: systemClock,
@@ -214,7 +220,19 @@ async function main(): Promise<number> {
   await stream.start((orders) => {
     reconciler.observeAll(orders);
   });
-  emit(`  [INFO] userDataStream      connecting to ${config.value.binance.streamUrl}`);
+
+  const coverage = currentCoverage(sources);
+  const coverageStatus =
+    coverage === "full" ? "PASS" : config.value.allowPartialAudit ? "WARN" : "FAIL";
+  emit(
+    `  [${coverageStatus}] auditCoverage       ${describeCoverage(coverage, config.value.allowPartialAudit)}`,
+  );
+  if (coverageStatus === "FAIL") {
+    emit("         The user data stream is the only account-wide source. Without it an order on a");
+    emit("         symbol outside the mandate cannot be seen. Set BONDED_ALLOW_PARTIAL_AUDIT=1 to");
+    emit("         accept that and trade anyway.");
+    return 1;
+  }
 
   // The console is a display, not a safety component: if it cannot bind, BONDED says
   // so and keeps trading. A broken screen must never take the gate down with it.

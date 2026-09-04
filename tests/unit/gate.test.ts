@@ -52,6 +52,7 @@ function state(overrides: Partial<ExchangeState> = {}): ExchangeState {
       dayKey: "2026-09-06",
       realisedUsd: decimalUnsafe("0"),
       quoteBalance: decimalUnsafe("10000"),
+      quoteBalanceKnown: true,
       incomplete: false,
     },
     symbolRules: new Map([
@@ -76,6 +77,7 @@ function input(overrides: Partial<GateInput> = {}): GateInput {
     intent: LIMIT_BUY,
     state: state(),
     nowMs: NOW,
+    pendingOpenOrders: 0,
     runtimeEnv: "testnet",
     scopeRevoked: false,
     auditPathHealthy: true,
@@ -192,6 +194,7 @@ describe("gate", () => {
         dayKey: "2026-09-06",
         realisedUsd: decimalUnsafe("-50"),
         quoteBalance: decimalUnsafe("10000"),
+        quoteBalanceKnown: true,
         incomplete: false,
       },
     });
@@ -217,6 +220,7 @@ describe("gate", () => {
           dayKey: "2026-09-06",
           realisedUsd: decimalUnsafe("-500"),
           quoteBalance: decimalUnsafe("10000"),
+          quoteBalanceKnown: true,
           incomplete: false,
         },
       });
@@ -235,6 +239,7 @@ describe("gate", () => {
           dayKey: "2026-09-06",
           realisedUsd: decimalUnsafe("-499.99"),
           quoteBalance: decimalUnsafe("10000"),
+          quoteBalanceKnown: true,
           incomplete: false,
         },
       });
@@ -253,12 +258,31 @@ describe("gate", () => {
           dayKey: "2026-09-06",
           realisedUsd: decimalUnsafe("-5000"),
           quoteBalance: decimalUnsafe("0"),
+          quoteBalanceKnown: true,
           incomplete: false,
         },
       });
       expect(evaluate(input({ mandate: proportional, state: losing })).verdict.outcome).toBe(
         "ALLOW",
       );
+    });
+
+    it("denies when the quote balance could not be observed", () => {
+      // The audit's H3: an unobserved balance used to read as zero, and zero took the
+      // early ALLOW, so the proportional cap silently switched itself off on the first
+      // order after every startup. Unknown must deny.
+      const proportional = mandate({ dailyLossLimitUsd: "100000" });
+      const blind = state({
+        dailyPnl: {
+          observedAtMs: NOW,
+          dayKey: "2026-09-06",
+          realisedUsd: decimalUnsafe("-5000"),
+          quoteBalance: decimalUnsafe("0"),
+          quoteBalanceKnown: false,
+          incomplete: false,
+        },
+      });
+      expectDeny(evaluate(input({ mandate: proportional, state: blind })), ClauseId.MAX_DRAWDOWN);
     });
 
     it("lets whichever cap is tighter fire first", () => {
@@ -269,6 +293,7 @@ describe("gate", () => {
           dayKey: "2026-09-06",
           realisedUsd: decimalUnsafe("-60"),
           quoteBalance: decimalUnsafe("10000"),
+          quoteBalanceKnown: true,
           incomplete: false,
         },
       });
@@ -283,6 +308,7 @@ describe("gate", () => {
         dayKey: "2026-09-06",
         realisedUsd: decimalUnsafe("-49.99"),
         quoteBalance: decimalUnsafe("10000"),
+        quoteBalanceKnown: true,
         incomplete: false,
       },
     });

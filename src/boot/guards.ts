@@ -14,6 +14,7 @@
 import type { BinanceClient } from "../binance/client.js";
 import type { Config } from "../config/env.js";
 import { verifyChain } from "../audit/decision-log.js";
+import { classifyRestHost, classifyStreamHost, knownHosts } from "../config/hosts.js";
 import { ErrorCode, describeUnknownError } from "../core/errors.js";
 import type { Mandate } from "../domain/mandate.js";
 
@@ -41,9 +42,14 @@ const MAX_CLOCK_SKEW_MS = 2_000;
  *
  * A misconfiguration that points a testnet-shaped setup at production must fail
  * loudly at boot, not quietly at the first order.
+ *
+ * Both the REST host and the stream host are resolved against an explicit allowlist
+ * (`config/hosts.ts`) and must agree with the declared environment. A declared
+ * environment is a label; the hostname is the fact, and only the fact decides whether
+ * real money is reachable.
  */
 function guardEnvironment(ctx: GuardContext): GuardResult {
-  const { env, baseUrl } = ctx.config.binance;
+  const { env, baseUrl, streamUrl } = ctx.config.binance;
   if (env === "prod" && !ctx.config.allowProd) {
     return {
       name: "environment",
@@ -51,20 +57,48 @@ function guardEnvironment(ctx: GuardContext): GuardResult {
       detail: "BINANCE_API_ENV=prod requires BONDED_ALLOW_PROD=1 to be set explicitly",
     };
   }
-  if (env === "testnet" && !baseUrl.includes("testnet")) {
+
+  const rest = classifyRestHost(baseUrl);
+  if (!rest.ok) {
+    const allowed = knownHosts(env).rest.join(", ");
     return {
       name: "environment",
       status: "FAIL",
-      detail: `env is testnet but base URL does not look like a testnet host: ${baseUrl}`,
+      detail: `${rest.reason}. Recognised ${env} hosts: ${allowed}`,
     };
   }
+  if (rest.env !== env) {
+    return {
+      name: "environment",
+      status: "FAIL",
+      detail: `BINANCE_API_ENV=${env} but ${rest.hostname} is a ${rest.env} host`,
+    };
+  }
+
+  const stream = classifyStreamHost(streamUrl);
+  if (!stream.ok) {
+    const allowed = knownHosts(env).stream.join(", ");
+    return {
+      name: "environment",
+      status: "FAIL",
+      detail: `${stream.reason}. Recognised ${env} hosts: ${allowed}`,
+    };
+  }
+  if (stream.env !== env) {
+    return {
+      name: "environment",
+      status: "FAIL",
+      detail: `BINANCE_API_ENV=${env} but stream host ${stream.hostname} is a ${stream.env} host`,
+    };
+  }
+
   return {
     name: "environment",
     status: env === "testnet" ? "PASS" : "WARN",
     detail:
       env === "testnet"
-        ? `testnet confirmed, base URL ${baseUrl}`
-        : `PRODUCTION enabled via BONDED_ALLOW_PROD, base URL ${baseUrl}`,
+        ? `testnet confirmed: ${rest.hostname} and ${stream.hostname}`
+        : `PRODUCTION enabled via BONDED_ALLOW_PROD: ${rest.hostname} and ${stream.hostname}`,
   };
 }
 

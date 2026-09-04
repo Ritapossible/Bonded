@@ -80,6 +80,16 @@ export interface DailyPnl {
    */
   readonly quoteBalance: DecimalString;
   /**
+   * Whether `quoteBalance` was actually observed.
+   *
+   * A balance of zero is ambiguous on its own: it means either "the account holds no
+   * quote asset" or "the account snapshot was unavailable". The drawdown clause has to
+   * tell those apart, because treating the second as the first turns a proportional cap
+   * into no cap at all — a fail-open in the component whose first invariant is to fail
+   * closed.
+   */
+  readonly quoteBalanceKnown: boolean;
+  /**
    * True when some of the day's sells had no known cost basis, so `realisedUsd`
    * understates activity. The gate still enforces on the figure it has — under-reporting
    * a loss must not become a reason to stop enforcing — but the caller can surface it.

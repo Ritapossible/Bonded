@@ -162,8 +162,13 @@ beforeEach(async () => {
   });
 });
 
+/** Logs opened by tests that build their own engine, closed with the shared one. */
+let capLogs: DecisionLog[] = [];
+
 afterEach(async () => {
   await decisionLog.close();
+  await Promise.all(capLogs.map((log) => log.close()));
+  capLogs = [];
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -289,6 +294,97 @@ describe("TradingEngine", () => {
   it("does not consume a log entry for a dry run", async () => {
     await engine.dryRun(OVERSIZED);
     expect(await records()).toHaveLength(0);
+  });
+
+  describe("the open-order cap under load", () => {
+    /**
+     * The audit's H2. `maxOpenOrders` is an aggregate cap read from an account snapshot
+     * that is cached for ten seconds. Before the fix, every order in a burst saw the
+     * same `openOrderCount: 0` and the cap bound only against traffic slow enough not
+     * to need it.
+     */
+    async function engineWithCap(maxOpenOrders: number): Promise<TradingEngine> {
+      const log = unwrap(await DecisionLog.open(join(dir, `cap-${String(maxOpenOrders)}.jsonl`)), "open cap log");
+      capLogs.push(log);
+      const client = new BinanceClient({
+        baseUrl: "https://testnet.binance.vision",
+        apiKey: new Secret("k".repeat(32)),
+        secretKey: new Secret("v".repeat(32)),
+        timeoutMs: 5_000,
+        recvWindowMs: 5_000,
+        logger: createSilentLogger(),
+        fetchImpl: exchange.fetch,
+        maxRetries: 0,
+      });
+      const provider = new StateProvider({ client, clock, symbols: SPEC.symbols });
+      unwrap(await provider.loadSymbolRules(), "ground symbols");
+      return new TradingEngine({
+        mandate: unwrap(compileMandate({ ...SPEC, maxOpenOrders }), "cap mandate"),
+        client,
+        stateProvider: provider,
+        decisionLog: log,
+        hmacSecret: new Secret(SECRET),
+        clock,
+        logger: createSilentLogger(),
+        runtimeEnv: "testnet",
+        isAuditPathHealthy: () => true,
+      });
+    }
+
+    it("holds against a burst of concurrent orders", async () => {
+      const capped = await engineWithCap(2);
+      const before = exchange.orderRequests.length;
+
+      const outcomes = await Promise.all(
+        Array.from({ length: 6 }, () => capped.placeOrder(ALLOWED)),
+      );
+
+      const placed = outcomes.filter((o) => o.ok && o.value.status === "PLACED");
+      const denied = outcomes.filter(
+        (o) => o.ok && o.value.status === "DENIED" && o.value.clause === ClauseId.MAX_OPEN_ORDERS,
+      );
+
+      expect(placed).toHaveLength(2);
+      expect(denied).toHaveLength(4);
+      // The exchange is the real check: only two orders may actually have been sent.
+      expect(exchange.orderRequests.length - before).toBe(2);
+    });
+
+    it("holds across sequential orders inside one account snapshot", async () => {
+      const capped = await engineWithCap(1);
+      const first = await capped.placeOrder(ALLOWED);
+      // The clock does not move, so the account snapshot is the same one. Before the
+      // fix this second order saw openOrderCount: 0 and was allowed.
+      const second = await capped.placeOrder(ALLOWED);
+
+      expect(first.ok && first.value.status).toBe("PLACED");
+      expect(second.ok && second.value.status).toBe("DENIED");
+      expect(second.ok && second.value.status === "DENIED" && second.value.clause).toBe(
+        ClauseId.MAX_OPEN_ORDERS,
+      );
+    });
+
+    it("does not count an order the exchange reports as already filled", async () => {
+      // A MARKET order that fills on placement occupies no slot. Counting it would
+      // deny legitimate orders for the life of the snapshot.
+      exchange.orderResponse = { orderId: 1, status: "FILLED" };
+      const capped = await engineWithCap(1);
+
+      expect((await capped.placeOrder(ALLOWED)).ok).toBe(true);
+      const second = await capped.placeOrder(ALLOWED);
+      expect(second.ok && second.value.status).toBe("PLACED");
+    });
+
+    it("counts an order whose status it cannot read", async () => {
+      // Unknown counts: over-counting refuses an order the operator may have wanted;
+      // under-counting breaches the cap they wrote down.
+      exchange.orderResponse = { orderId: 2 };
+      const capped = await engineWithCap(1);
+
+      expect((await capped.placeOrder(ALLOWED)).ok).toBe(true);
+      const second = await capped.placeOrder(ALLOWED);
+      expect(second.ok && second.value.status).toBe("DENIED");
+    });
   });
 
   it("keeps the chain intact across concurrent orders", async () => {

@@ -63,6 +63,16 @@ export interface GateInput {
    * central claim has quietly stopped being true.
    */
   readonly auditPathHealthy: boolean;
+  /**
+   * Orders this process has placed that may still be open but are not yet reflected in
+   * `state.account.openOrderCount`.
+   *
+   * The account snapshot is up to ten seconds old, and `maxOpenOrders` is an aggregate
+   * cap rather than a per-order one. Without this, two orders a second apart both read
+   * the same `openOrderCount` and both pass a limit of one — the cap would bind only
+   * against traffic slow enough not to need it.
+   */
+  readonly pendingOpenOrders: number;
 }
 
 /** Input plus the values derived once in the prelude, so no clause recomputes them. */
@@ -279,13 +289,19 @@ export const CLAUSES: readonly Clause[] = [
     text: "The number of open orders must stay within the mandate's limit.",
     requires: ["account"],
     evaluate: (ctx) => {
-      const open = ctx.state.account.openOrderCount;
+      // Observed count plus what this process has placed since that observation. The
+      // snapshot alone lags by up to its freshness budget, and an aggregate cap that
+      // lags is not a cap.
+      const open = ctx.state.account.openOrderCount + ctx.pendingOpenOrders;
       // `>=` because this order would become the next one.
       return open >= ctx.mandate.spec.maxOpenOrders
         ? deny({
             clause: ClauseId.MAX_OPEN_ORDERS,
             clauseText: "The number of open orders must stay within the mandate's limit.",
-            observed: String(open),
+            observed:
+              ctx.pendingOpenOrders === 0
+                ? String(open)
+                : `${String(open)} (${String(ctx.state.account.openOrderCount)} observed, ${String(ctx.pendingOpenOrders)} in flight)`,
             limit: String(ctx.mandate.spec.maxOpenOrders),
           })
         : ALLOW;
@@ -409,10 +425,22 @@ export const CLAUSES: readonly Clause[] = [
       const realised = ctx.state.dailyPnl.realisedUsd;
       if (!isNegative(realised)) return ALLOW;
 
+      // An unobserved balance is not a zero balance. Allowing here would turn a
+      // proportional cap into no cap at all, which is precisely the fail-open this
+      // component's first invariant forbids.
+      if (!ctx.state.dailyPnl.quoteBalanceKnown) {
+        return deny({
+          clause: ClauseId.MAX_DRAWDOWN,
+          clauseText:
+            "The day's realised loss must not exceed the mandate's percentage of quote balance.",
+          observed: "quote balance could not be observed",
+          limit: `${ctx.mandate.spec.maxDrawdownPct}% of balance`,
+        });
+      }
+
       const balance = ctx.state.dailyPnl.quoteBalance;
-      // With no quote balance there is nothing to take a percentage of. The absolute
-      // `dailyLossLimitUsd` clause still binds, so this is a gap in one cap rather than
-      // an unbounded account.
+      // A balance genuinely observed as zero leaves nothing to take a percentage of.
+      // The absolute `dailyLossLimitUsd` clause still binds.
       if (compare(balance, ZERO) <= 0) return ALLOW;
 
       const loss = multiply(realised, NEGATIVE_ONE);

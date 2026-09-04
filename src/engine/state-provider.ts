@@ -31,6 +31,8 @@ import { computeRealisedPnl, type Trade } from "../domain/pnl.js";
  * Refresh slightly ahead of the gate's staleness budget, so a snapshot is renewed
  * before it expires rather than after an order has already been denied for it.
  */
+const ACCOUNT_MS = STALENESS_BUDGET_MS.account;
+
 const REFRESH_MARGIN_MS = 1_000;
 
 /**
@@ -63,7 +65,12 @@ export class StateProvider {
   /** Highest trade id seen per symbol, so each refresh fetches only what is new. */
   readonly #lastTradeId = new Map<string, number>();
   #pnl:
-    | Cached<{ realised: DecimalString; quoteBalance: DecimalString; incomplete: boolean }>
+    | Cached<{
+        realised: DecimalString;
+        quoteBalance: DecimalString;
+        quoteBalanceKnown: boolean;
+        incomplete: boolean;
+      }>
     | undefined;
   #account:
     | Cached<{ canTrade: boolean; balances: ReadonlyMap<string, string>; openOrderCount: number }>
@@ -193,12 +200,25 @@ export class StateProvider {
       const observedAtMs = this.#clock.now();
       const pnl = computeRealisedPnl(allTrades, observedAtMs, quoteAssets);
 
-      // The drawdown cap is a percentage of what the account actually holds in the
-      // quote asset, read from the same account snapshot the other clauses use.
+      // The drawdown cap is a percentage of what the account actually holds, so the
+      // balance has to be *observed*, not whatever happened to be cached when a
+      // parallel refresh got here first. `#once` makes this share the account round
+      // trip already in flight rather than issuing a second one.
+      if (this.#account === undefined || !this.#isFresh(this.#account.observedAtMs, ACCOUNT_MS)) {
+        await this.#refreshAccount();
+      }
+
+      const account = this.#account;
+      // Unknown, not zero. The gate denies on unknown; a zero it can trust is fine.
+      const quoteBalanceKnown =
+        account !== undefined && this.#isFresh(account.observedAtMs, ACCOUNT_MS);
+
       let quoteBalance = ZERO;
-      for (const asset of quoteAssets) {
-        const held = this.#account?.value.balances.get(asset);
-        if (held !== undefined) quoteBalance = add(quoteBalance, held as DecimalString);
+      if (quoteBalanceKnown) {
+        for (const asset of quoteAssets) {
+          const held = account.value.balances.get(asset);
+          if (held !== undefined) quoteBalance = add(quoteBalance, held as DecimalString);
+        }
       }
 
       this.#pnl = {
@@ -206,6 +226,7 @@ export class StateProvider {
         value: {
           realised: pnl.realised,
           quoteBalance,
+          quoteBalanceKnown,
           incomplete: pnl.unbasisedQuantity.size > 0,
         },
       };
@@ -266,6 +287,7 @@ export class StateProvider {
         dayKey: utcDayKey(now),
         realisedUsd: pnl?.value.realised ?? ZERO,
         quoteBalance: pnl?.value.quoteBalance ?? ZERO,
+        quoteBalanceKnown: pnl?.value.quoteBalanceKnown ?? false,
         incomplete: pnl?.value.incomplete ?? false,
       },
       symbolRules: this.#symbolRules,

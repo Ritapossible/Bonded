@@ -101,6 +101,24 @@ export class TradingEngine {
   #scopeRevoked = false;
   #revocationReason: string | undefined;
 
+  /**
+   * Serialises the order path.
+   *
+   * Snapshot, evaluate, append and send must happen as one unit. Interleaved, two
+   * concurrent calls evaluate against the same snapshot and both pass an aggregate cap
+   * that neither would pass alone — a gate that binds only when nothing is happening.
+   * The cost is that orders queue; that is the correct trade for a limit enforcer.
+   */
+  #orderChain: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Orders placed against the current account observation that may still be open.
+   *
+   * Reset whenever a newer account snapshot arrives, because the exchange's own count
+   * then includes them and counting twice would deny legitimate orders.
+   */
+  #pending: { observedAtMs: number; count: number } = { observedAtMs: 0, count: 0 };
+
   constructor(options: TradingEngineOptions) {
     this.#mandate = options.mandate;
     this.#client = options.client;
@@ -148,18 +166,38 @@ export class TradingEngine {
 
   /** Evaluate without side effects. Used by the console and by tests. */
   async dryRun(intent: OrderIntent): Promise<GateResult> {
+    const state = await this.#state.snapshot();
     return evaluate({
       mandate: this.#mandate,
       intent,
-      state: await this.#state.snapshot(),
+      state,
       nowMs: this.#clock.now(),
       runtimeEnv: this.#runtimeEnv,
       scopeRevoked: this.#scopeRevoked,
       auditPathHealthy: this.#isAuditPathHealthy(),
+      pendingOpenOrders: this.#pendingOpenOrdersFor(state),
     });
   }
 
+  /**
+   * Place an order, one at a time.
+   *
+   * The whole body runs inside `#orderChain`, so evaluation and placement of one order
+   * complete before the next begins. Errors are contained: the chain is advanced with a
+   * settled promise regardless of outcome, so a rejected order cannot wedge the queue.
+   */
   async placeOrder(intent: OrderIntent): Promise<Result<PlaceOrderOutcome, BondedError>> {
+    const run = this.#orderChain.then(
+      () => this.#placeOrderSerialised(intent),
+      () => this.#placeOrderSerialised(intent),
+    );
+    this.#orderChain = run.catch(() => undefined);
+    return run;
+  }
+
+  async #placeOrderSerialised(
+    intent: OrderIntent,
+  ): Promise<Result<PlaceOrderOutcome, BondedError>> {
     const state = await this.#state.snapshot();
     const nowMs = this.#clock.now();
 
@@ -171,6 +209,7 @@ export class TradingEngine {
       runtimeEnv: this.#runtimeEnv,
       scopeRevoked: this.#scopeRevoked,
       auditPathHealthy: this.#isAuditPathHealthy(),
+      pendingOpenOrders: this.#pendingOpenOrdersFor(state),
     });
 
     const record = await this.#recordDecision(intent, result, nowMs);
@@ -232,12 +271,36 @@ export class TradingEngine {
       });
     }
 
+    this.#countIfStillOpen(state.account.observedAtMs, placed.value);
+
     return ok({
       status: "PLACED",
       clientOrderId,
       seq: record.value.seq,
       exchangeResponse: placed.value,
     });
+  }
+
+  /** In-flight orders attributable to the account observation this state carries. */
+  #pendingOpenOrdersFor(state: ExchangeState): number {
+    return this.#pending.observedAtMs === state.account.observedAtMs ? this.#pending.count : 0;
+  }
+
+  /**
+   * Record a placed order against the open-order cap, unless the exchange has already
+   * told us it is closed.
+   *
+   * A `MARKET` order that filled on placement occupies no slot, and counting it would
+   * deny legitimate orders for the life of the snapshot. A status we cannot read counts,
+   * because over-counting refuses an order the operator may have wanted while
+   * under-counting breaches the cap they wrote down.
+   */
+  #countIfStillOpen(observedAtMs: number, response: unknown): void {
+    if (isSettledOrderStatus(response)) return;
+    this.#pending =
+      this.#pending.observedAtMs === observedAtMs
+        ? { observedAtMs, count: this.#pending.count + 1 }
+        : { observedAtMs, count: 1 };
   }
 
   /**
@@ -288,6 +351,19 @@ export class TradingEngine {
       return ok({ ...base, outcome: "ALLOW" as const, clientOrderId: clientOrderId.value });
     });
   }
+}
+
+/**
+ * Whether the exchange's placement response says the order is already closed.
+ *
+ * Deliberately conservative: anything unrecognised is treated as still open.
+ */
+const SETTLED_STATUSES = new Set(["FILLED", "CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"]);
+
+function isSettledOrderStatus(response: unknown): boolean {
+  if (typeof response !== "object" || response === null) return false;
+  const status = (response as { status?: unknown }).status;
+  return typeof status === "string" && SETTLED_STATUSES.has(status);
 }
 
 function denialOutcome(seq: number, verdict: Verdict & { outcome: "DENY" }): PlaceOrderOutcome {

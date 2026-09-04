@@ -26,8 +26,27 @@ import { parseAllOrders, parseExecutionReport, type ObservedOrder } from "./obse
 
 export type OrderHandler = (orders: readonly ObservedOrder[]) => void;
 
+/**
+ * How much of the account a source can actually see.
+ *
+ * This is not a detail. `GET /api/v3/allOrders` requires a symbol — there is no
+ * account-wide REST listing — so the polling backstop can only ask about symbols it was
+ * given. An order on any other symbol is invisible to it. The user data stream is
+ * account-wide and has no such blind spot.
+ *
+ * Treating the two as interchangeable would let BONDED report a healthy audit path
+ * while being structurally unable to see the simplest evasion there is: trade a symbol
+ * the mandate never mentioned.
+ */
+export type OrderSourceCoverage =
+  /** Every order on the account, whatever the symbol. */
+  | "account"
+  /** Only the symbols this source was configured to watch. */
+  | "symbols";
+
 export interface OrderSource {
   readonly name: string;
+  readonly coverage: OrderSourceCoverage;
   start(onOrders: OrderHandler): Promise<void>;
   stop(): Promise<void>;
   /** When this source last successfully heard from the exchange. */
@@ -51,6 +70,7 @@ export interface PollingOrderSourceOptions {
 
 export class PollingOrderSource implements OrderSource {
   readonly name = "poll";
+  readonly coverage = "symbols" as const;
 
   readonly #client: BinanceClient;
   readonly #clock: Clock;
@@ -182,6 +202,7 @@ export interface UserDataStreamSourceOptions {
  */
 export class UserDataStreamSource implements OrderSource {
   readonly name = "stream";
+  readonly coverage = "account" as const;
 
   readonly #client: BinanceClient;
   readonly #clock: Clock;

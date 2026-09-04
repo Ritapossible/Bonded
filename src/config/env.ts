@@ -62,6 +62,20 @@ const EnvSchema = z.object({
     .default("wss://stream.testnet.binance.vision/ws"),
   BONDED_POLL_INTERVAL_MS: z.coerce.number().int().min(1_000).max(300_000).default(15_000),
   BONDED_ALLOW_PROD: z.enum(["0", "1"]).default("0"),
+  /**
+   * Permit trading when only symbol-scoped observation is live.
+   *
+   * Off by default. With the user data stream down, an order on a symbol outside the
+   * mandate cannot be observed at all, so the detection claim no longer holds for it.
+   */
+  BONDED_ALLOW_PARTIAL_AUDIT: z.enum(["0", "1"]).default("0"),
+  /**
+   * Extra symbols the polling backstop watches, beyond the mandate's own.
+   *
+   * The poll can only ask about symbols it is given. Naming the pairs an account
+   * actually holds narrows the blind spot the REST API forces on it.
+   */
+  BONDED_WATCH_SYMBOLS: z.string().default(""),
   BONDED_HMAC_SECRET: z
     .string()
     .min(32, "must be at least 32 characters; generate with `openssl rand -hex 32`"),
@@ -85,6 +99,10 @@ export interface Config {
     readonly recvWindowMs: number;
   };
   readonly allowProd: boolean;
+  /** Whether trading may continue on symbol-scoped observation alone. */
+  readonly allowPartialAudit: boolean;
+  /** Extra symbols the polling backstop watches, beyond the mandate's own. */
+  readonly watchSymbols: readonly string[];
   readonly hmacSecret: Secret;
   readonly mandatePath: string;
   readonly decisionLogPath: string;
@@ -125,6 +143,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Result<Conf
       recvWindowMs: env.BONDED_RECV_WINDOW_MS,
     },
     allowProd: env.BONDED_ALLOW_PROD === "1",
+    allowPartialAudit: env.BONDED_ALLOW_PARTIAL_AUDIT === "1",
+    watchSymbols: env.BONDED_WATCH_SYMBOLS.split(",")
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter((symbol) => symbol !== ""),
     hmacSecret: new Secret(env.BONDED_HMAC_SECRET),
     mandatePath: env.BONDED_MANDATE_PATH,
     decisionLogPath: env.BONDED_DECISION_LOG_PATH,
@@ -141,6 +163,8 @@ export function describeConfig(config: Config): Record<string, unknown> {
     baseUrl: config.binance.baseUrl,
     streamUrl: config.binance.streamUrl,
     allowProd: config.allowProd,
+    allowPartialAudit: config.allowPartialAudit,
+    watchSymbols: config.watchSymbols,
     mandatePath: config.mandatePath,
     decisionLogPath: config.decisionLogPath,
     logLevel: config.logLevel,
