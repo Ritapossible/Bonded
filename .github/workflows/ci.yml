@@ -43,3 +43,15 @@ jobs:
 
       - name: Verify the package entry point resolves
         run: node -e "import('./dist/index.js').then(m => { if (typeof m.evaluate !== 'function') { throw new Error('public API is missing evaluate'); } })"
+
+      # The site build fails if the __SITE_URL__ placeholder is missing, so this catches a
+      # deployment that would ship an Open Graph card pointing at nothing.
+      - name: Build the site
+        run: SITE_URL=https://bonded.example node scripts/build-site.mjs
+
+      - name: Verify no unresolved placeholder reaches the output
+        run: |
+          if grep -rq '__SITE_URL__' dist-site; then
+            echo "unresolved __SITE_URL__ in dist-site" >&2
+            exit 1
+          fi

@@ -14,6 +14,25 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F0B90B'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Helvetica,Arial,sans-serif' font-size='20' font-weight='700' fill='%230B0E11'%3EB%3C/text%3E%3C/svg%3E"
     />
 
+    <link rel="canonical" href="__SITE_URL__/docs" />
+
+    <meta property="og:site_name" content="BONDED" />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="__SITE_URL__/docs" />
+    <meta property="og:title" content="Documentation — BONDED" />
+    <meta
+      property="og:description"
+      content="Install, configure and operate BONDED: mandate schema, gate clauses, MCP tool reference, reconciliation outcomes and boot guards."
+    />
+    <meta property="og:image" content="__SITE_URL__/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="BONDED — going around it is possible, unnoticed is not."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -24,6 +43,7 @@
   </head>
 
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <header class="header">
       <div class="header__pill">
         <a class="brand" href="index.html">BOND<span>ED</span></a>
@@ -46,7 +66,7 @@
       </div>
     </header>
 
-    <div class="shell docs">
+    <main class="shell docs">
       <!-- --------------------------------------------------------- sidebar -->
       <aside class="sidebar">
         <nav id="toc">
@@ -77,7 +97,7 @@
       </aside>
 
       <!-- ------------------------------------------------------------ body -->
-      <article class="doc">
+      <article class="doc" id="main" tabindex="-1">
         <h1>Documentation</h1>
         <p>
           BONDED is a mandate gate and reconciliation layer between an AI agent and a Binance Spot
@@ -93,37 +113,39 @@
           what BONDED actually authorised.
         </p>
         <p>Three components, in the order an order passes through them:</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Component</th>
-              <th>Responsibility</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Gate</td>
-              <td>
-                Pure evaluation of an order against the mandate. No I/O, fails closed, names the
-                clause that refused.
-              </td>
-            </tr>
-            <tr>
-              <td>Audit log</td>
-              <td>
-                Append-only, hash-chained record of every decision, <code>fsync</code>'d before the
-                order is sent.
-              </td>
-            </tr>
-            <tr>
-              <td>Reconciler</td>
-              <td>
-                Compares the exchange's order history against the audit log. Disagreement burns the
-                bond.
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Responsibility</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Gate</td>
+                <td>
+                  Pure evaluation of an order against the mandate. No I/O, fails closed, names the
+                  clause that refused.
+                </td>
+              </tr>
+              <tr>
+                <td>Audit log</td>
+                <td>
+                  Append-only, hash-chained record of every decision, <code>fsync</code>'d before
+                  the order is sent.
+                </td>
+              </tr>
+              <tr>
+                <td>Reconciler</td>
+                <td>
+                  Compares the exchange's order history against the audit log. Disagreement burns
+                  the bond.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <h2 id="requirements">Requirements</h2>
         <ul>
@@ -149,82 +171,86 @@ npm run build</code></pre>
           than at the first order.
         </p>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Variable</th>
-              <th>Default</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>BINANCE_API_KEY</code></td>
-              <td>—</td>
-              <td>Required. Spot Testnet key.</td>
-            </tr>
-            <tr>
-              <td><code>BINANCE_SECRET_KEY</code></td>
-              <td>—</td>
-              <td>
-                Required. Never logged; wrapped so interpolation yields <code>[redacted]</code>.
-              </td>
-            </tr>
-            <tr>
-              <td><code>BONDED_HMAC_SECRET</code></td>
-              <td>—</td>
-              <td>
-                Required, 32+ chars. Stamps authorised orders so a bypass is detectable. Generate
-                with <code>openssl rand -hex 32</code>.
-              </td>
-            </tr>
-            <tr>
-              <td><code>BINANCE_API_ENV</code></td>
-              <td><code>testnet</code></td>
-              <td><code>testnet</code> or <code>prod</code>.</td>
-            </tr>
-            <tr>
-              <td><code>BONDED_ALLOW_PROD</code></td>
-              <td><code>0</code></td>
-              <td>Must be <code>1</code> for production. A misconfiguration fails at boot.</td>
-            </tr>
-            <tr>
-              <td><code>BINANCE_SPOT_BASE_PATH</code></td>
-              <td><code>https://testnet.binance.vision</code></td>
-              <td>REST base URL.</td>
-            </tr>
-            <tr>
-              <td><code>BINANCE_STREAM_BASE_PATH</code></td>
-              <td><code>wss://stream.testnet.binance.vision/ws</code></td>
-              <td>User data stream endpoint.</td>
-            </tr>
-            <tr>
-              <td><code>BONDED_MANDATE_PATH</code></td>
-              <td><code>./data/mandate.json</code></td>
-              <td>Mandate location.</td>
-            </tr>
-            <tr>
-              <td><code>BONDED_DECISION_LOG_PATH</code></td>
-              <td><code>./data/decisions.jsonl</code></td>
-              <td>Hash-chained audit log.</td>
-            </tr>
-            <tr>
-              <td><code>BONDED_POLL_INTERVAL_MS</code></td>
-              <td><code>15000</code></td>
-              <td>Reconciliation backstop interval.</td>
-            </tr>
-            <tr>
-              <td><code>BONDED_CONSOLE_PORT</code></td>
-              <td><code>7391</code></td>
-              <td>Owner console. <code>0</code> disables it. Always loopback.</td>
-            </tr>
-            <tr>
-              <td><code>BONDED_LOG_LEVEL</code></td>
-              <td><code>info</code></td>
-              <td><code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Default</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>BINANCE_API_KEY</code></td>
+                <td>—</td>
+                <td>Required. Spot Testnet key.</td>
+              </tr>
+              <tr>
+                <td><code>BINANCE_SECRET_KEY</code></td>
+                <td>—</td>
+                <td>
+                  Required. Never logged; wrapped so interpolation yields <code>[redacted]</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>BONDED_HMAC_SECRET</code></td>
+                <td>—</td>
+                <td>
+                  Required, 32+ chars. Stamps authorised orders so a bypass is detectable. Generate
+                  with <code>openssl rand -hex 32</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>BINANCE_API_ENV</code></td>
+                <td><code>testnet</code></td>
+                <td><code>testnet</code> or <code>prod</code>.</td>
+              </tr>
+              <tr>
+                <td><code>BONDED_ALLOW_PROD</code></td>
+                <td><code>0</code></td>
+                <td>Must be <code>1</code> for production. A misconfiguration fails at boot.</td>
+              </tr>
+              <tr>
+                <td><code>BINANCE_SPOT_BASE_PATH</code></td>
+                <td><code>https://testnet.binance.vision</code></td>
+                <td>REST base URL.</td>
+              </tr>
+              <tr>
+                <td><code>BINANCE_STREAM_BASE_PATH</code></td>
+                <td><code>wss://stream.testnet.binance.vision/ws</code></td>
+                <td>User data stream endpoint.</td>
+              </tr>
+              <tr>
+                <td><code>BONDED_MANDATE_PATH</code></td>
+                <td><code>./data/mandate.json</code></td>
+                <td>Mandate location.</td>
+              </tr>
+              <tr>
+                <td><code>BONDED_DECISION_LOG_PATH</code></td>
+                <td><code>./data/decisions.jsonl</code></td>
+                <td>Hash-chained audit log.</td>
+              </tr>
+              <tr>
+                <td><code>BONDED_POLL_INTERVAL_MS</code></td>
+                <td><code>15000</code></td>
+                <td>Reconciliation backstop interval.</td>
+              </tr>
+              <tr>
+                <td><code>BONDED_CONSOLE_PORT</code></td>
+                <td><code>7391</code></td>
+                <td>Owner console. <code>0</code> disables it. Always loopback.</td>
+              </tr>
+              <tr>
+                <td><code>BONDED_LOG_LEVEL</code></td>
+                <td><code>info</code></td>
+                <td>
+                  <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <div class="note note--warn">
           <p>
@@ -285,92 +311,94 @@ npm run build</code></pre>
           single file, so the whole enforcement surface is auditable at once.
         </p>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Clause</th>
-              <th>Denies when</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>environment</code></td>
-              <td>The mandate's env differs from the runtime env.</td>
-            </tr>
-            <tr>
-              <td><code>scope</code></td>
-              <td>Trade scope has been revoked by a finding.</td>
-            </tr>
-            <tr>
-              <td><code>auditPath</code></td>
-              <td>No order source is delivering — reconciliation is blind.</td>
-            </tr>
-            <tr>
-              <td><code>expiry</code></td>
-              <td>The mandate has expired.</td>
-            </tr>
-            <tr>
-              <td><code>symbolAllowlist</code></td>
-              <td>The symbol is outside the allowlist or unresolvable.</td>
-            </tr>
-            <tr>
-              <td><code>symbolTradable</code></td>
-              <td>The symbol is not currently trading.</td>
-            </tr>
-            <tr>
-              <td><code>orderType</code></td>
-              <td>The order type is not permitted.</td>
-            </tr>
-            <tr>
-              <td><code>side</code></td>
-              <td>The side is not permitted.</td>
-            </tr>
-            <tr>
-              <td><code>tradingWindowUtc</code></td>
-              <td>Outside the mandate's UTC window.</td>
-            </tr>
-            <tr>
-              <td><code>accountTradingDisabled</code></td>
-              <td>The exchange account cannot trade.</td>
-            </tr>
-            <tr>
-              <td><code>maxOpenOrders</code></td>
-              <td>The open-order limit is already reached.</td>
-            </tr>
-            <tr>
-              <td><code>priceFilter</code></td>
-              <td>Price breaches tick size or price bounds.</td>
-            </tr>
-            <tr>
-              <td><code>lotSize</code></td>
-              <td>Quantity breaches step size or quantity bounds.</td>
-            </tr>
-            <tr>
-              <td><code>minNotional</code></td>
-              <td>Notional is below the symbol's minimum.</td>
-            </tr>
-            <tr>
-              <td><code>maxNotionalUsd</code></td>
-              <td>Notional exceeds the mandate's maximum.</td>
-            </tr>
-            <tr>
-              <td><code>dailyLossLimitUsd</code></td>
-              <td>The day's realised loss reaches the absolute cap.</td>
-            </tr>
-            <tr>
-              <td><code>maxDrawdownPct</code></td>
-              <td>The day's realised loss reaches the proportional cap.</td>
-            </tr>
-            <tr>
-              <td><code>referencePrice</code></td>
-              <td>A base-sized market order has no live price to bound it.</td>
-            </tr>
-            <tr>
-              <td><code>stateFreshness</code></td>
-              <td>Exchange state is stale or timestamped in the future.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Clause</th>
+                <th>Denies when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>environment</code></td>
+                <td>The mandate's env differs from the runtime env.</td>
+              </tr>
+              <tr>
+                <td><code>scope</code></td>
+                <td>Trade scope has been revoked by a finding.</td>
+              </tr>
+              <tr>
+                <td><code>auditPath</code></td>
+                <td>No order source is delivering — reconciliation is blind.</td>
+              </tr>
+              <tr>
+                <td><code>expiry</code></td>
+                <td>The mandate has expired.</td>
+              </tr>
+              <tr>
+                <td><code>symbolAllowlist</code></td>
+                <td>The symbol is outside the allowlist or unresolvable.</td>
+              </tr>
+              <tr>
+                <td><code>symbolTradable</code></td>
+                <td>The symbol is not currently trading.</td>
+              </tr>
+              <tr>
+                <td><code>orderType</code></td>
+                <td>The order type is not permitted.</td>
+              </tr>
+              <tr>
+                <td><code>side</code></td>
+                <td>The side is not permitted.</td>
+              </tr>
+              <tr>
+                <td><code>tradingWindowUtc</code></td>
+                <td>Outside the mandate's UTC window.</td>
+              </tr>
+              <tr>
+                <td><code>accountTradingDisabled</code></td>
+                <td>The exchange account cannot trade.</td>
+              </tr>
+              <tr>
+                <td><code>maxOpenOrders</code></td>
+                <td>The open-order limit is already reached.</td>
+              </tr>
+              <tr>
+                <td><code>priceFilter</code></td>
+                <td>Price breaches tick size or price bounds.</td>
+              </tr>
+              <tr>
+                <td><code>lotSize</code></td>
+                <td>Quantity breaches step size or quantity bounds.</td>
+              </tr>
+              <tr>
+                <td><code>minNotional</code></td>
+                <td>Notional is below the symbol's minimum.</td>
+              </tr>
+              <tr>
+                <td><code>maxNotionalUsd</code></td>
+                <td>Notional exceeds the mandate's maximum.</td>
+              </tr>
+              <tr>
+                <td><code>dailyLossLimitUsd</code></td>
+                <td>The day's realised loss reaches the absolute cap.</td>
+              </tr>
+              <tr>
+                <td><code>maxDrawdownPct</code></td>
+                <td>The day's realised loss reaches the proportional cap.</td>
+              </tr>
+              <tr>
+                <td><code>referencePrice</code></td>
+                <td>A base-sized market order has no live price to bound it.</td>
+              </tr>
+              <tr>
+                <td><code>stateFreshness</code></td>
+                <td>Exchange state is stale or timestamped in the future.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <p>
           <strong>Fail closed.</strong> Anything the gate cannot evaluate is a denial, never a pass.
@@ -411,42 +439,44 @@ npm run build</code></pre>
           enough to mint one without the secret.
         </p>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Outcome</th>
-              <th>Meaning</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>AUTHORISED</code></td>
-              <td>Executed exactly as authorised.</td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <td><code>MISMATCHED</code></td>
-              <td>Authorised, but not for the order that executed.</td>
-              <td>Bond burns</td>
-            </tr>
-            <tr>
-              <td><code>FOREIGN</code></td>
-              <td>No BONDED identifier. A plain bypass.</td>
-              <td>Bond burns</td>
-            </tr>
-            <tr>
-              <td><code>FORGED</code></td>
-              <td>Wears the namespace without a valid tag.</td>
-              <td>Bond burns</td>
-            </tr>
-            <tr>
-              <td><code>UNKNOWN_AUTHENTIC</code></td>
-              <td>Valid tag, no matching record.</td>
-              <td>Bond burns</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Outcome</th>
+                <th>Meaning</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>AUTHORISED</code></td>
+                <td>Executed exactly as authorised.</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>MISMATCHED</code></td>
+                <td>Authorised, but not for the order that executed.</td>
+                <td>Bond burns</td>
+              </tr>
+              <tr>
+                <td><code>FOREIGN</code></td>
+                <td>No BONDED identifier. A plain bypass.</td>
+                <td>Bond burns</td>
+              </tr>
+              <tr>
+                <td><code>FORGED</code></td>
+                <td>Wears the namespace without a valid tag.</td>
+                <td>Bond burns</td>
+              </tr>
+              <tr>
+                <td><code>UNKNOWN_AUTHENTIC</code></td>
+                <td>Valid tag, no matching record.</td>
+                <td>Bond burns</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <p>Findings carry four things, not one:</p>
         <ol>
@@ -479,47 +509,49 @@ npm run build</code></pre>
 
         <h3><code>place_order</code></h3>
         <p>Submit a Spot order for evaluation.</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Field</th>
-              <th>Type</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>symbol</code></td>
-              <td>string</td>
-              <td>Required. e.g. <code>ETHUSDT</code></td>
-            </tr>
-            <tr>
-              <td><code>side</code></td>
-              <td><code>BUY</code> | <code>SELL</code></td>
-              <td>Required.</td>
-            </tr>
-            <tr>
-              <td><code>type</code></td>
-              <td><code>LIMIT</code> | <code>MARKET</code></td>
-              <td>Required.</td>
-            </tr>
-            <tr>
-              <td><code>quantity</code></td>
-              <td>string</td>
-              <td>Base asset. Required for <code>LIMIT</code>.</td>
-            </tr>
-            <tr>
-              <td><code>price</code></td>
-              <td>string</td>
-              <td>Required for <code>LIMIT</code>.</td>
-            </tr>
-            <tr>
-              <td><code>quoteOrderQty</code></td>
-              <td>string</td>
-              <td>Quote asset. <code>MARKET</code> only, never with <code>quantity</code>.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>symbol</code></td>
+                <td>string</td>
+                <td>Required. e.g. <code>ETHUSDT</code></td>
+              </tr>
+              <tr>
+                <td><code>side</code></td>
+                <td><code>BUY</code> | <code>SELL</code></td>
+                <td>Required.</td>
+              </tr>
+              <tr>
+                <td><code>type</code></td>
+                <td><code>LIMIT</code> | <code>MARKET</code></td>
+                <td>Required.</td>
+              </tr>
+              <tr>
+                <td><code>quantity</code></td>
+                <td>string</td>
+                <td>Base asset. Required for <code>LIMIT</code>.</td>
+              </tr>
+              <tr>
+                <td><code>price</code></td>
+                <td>string</td>
+                <td>Required for <code>LIMIT</code>.</td>
+              </tr>
+              <tr>
+                <td><code>quoteOrderQty</code></td>
+                <td>string</td>
+                <td>Quote asset. <code>MARKET</code> only, never with <code>quantity</code>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <p>Returns <code>PLACED</code>, <code>DENIED</code> or <code>FAILED</code>. A denial:</p>
         <pre><code>{
@@ -615,32 +647,34 @@ npm run build</code></pre>
         </p>
 
         <h2 id="exit-codes">Exit codes</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Meaning</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>0</code></td>
-              <td>Clean shutdown.</td>
-            </tr>
-            <tr>
-              <td><code>1</code></td>
-              <td>A boot guard failed. The banner names which.</td>
-            </tr>
-            <tr>
-              <td><code>70</code></td>
-              <td>Uncaught exception or unhandled rejection. The audit log is flushed first.</td>
-            </tr>
-            <tr>
-              <td><code>78</code></td>
-              <td>Invalid configuration. The failing fields are listed.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>0</code></td>
+                <td>Clean shutdown.</td>
+              </tr>
+              <tr>
+                <td><code>1</code></td>
+                <td>A boot guard failed. The banner names which.</td>
+              </tr>
+              <tr>
+                <td><code>70</code></td>
+                <td>Uncaught exception or unhandled rejection. The audit log is flushed first.</td>
+              </tr>
+              <tr>
+                <td><code>78</code></td>
+                <td>Invalid configuration. The failing fields are listed.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <h2 id="limits">Limits</h2>
         <p>
@@ -712,7 +746,7 @@ npm run build      # compile to dist/</code></pre>
           gate plus a check that the published entry point resolves.
         </p>
       </article>
-    </div>
+    </main>
 
     <footer class="footer">
       <div class="shell">
@@ -726,57 +760,15 @@ npm run build      # compile to dist/</code></pre>
             <a href="https://github.com/Ritapossible/Bonded">GitHub</a>
           </nav>
         </div>
-        <p class="footer__legal">
-          Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
-          advice — BONDED enforces limits and produces no trading recommendations.
-        </p>
+        <div class="footer__legal">
+          <p>
+            Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
+            advice — BONDED enforces limits and produces no trading recommendations.
+          </p>
+        </div>
       </div>
     </footer>
 
-    <script>
-      // Highlight the section currently in view. Plain IntersectionObserver: a docs page
-      // should not need a framework, and this one has no build step to hide one in.
-      (function () {
-        "use strict";
-        var links = Array.prototype.slice.call(document.querySelectorAll("#toc a"));
-        var byId = {};
-        links.forEach(function (link) {
-          byId[link.getAttribute("href").slice(1)] = link;
-        });
-
-        var headings = links
-          .map(function (link) {
-            return document.getElementById(link.getAttribute("href").slice(1));
-          })
-          .filter(Boolean);
-
-        if (!("IntersectionObserver" in window) || headings.length === 0) return;
-
-        var visible = new Set();
-        var observer = new IntersectionObserver(
-          function (entries) {
-            entries.forEach(function (entry) {
-              if (entry.isIntersecting) visible.add(entry.target.id);
-              else visible.delete(entry.target.id);
-            });
-            // The topmost visible heading wins, so scrolling up and down agree.
-            for (var i = 0; i < headings.length; i++) {
-              if (visible.has(headings[i].id)) {
-                links.forEach(function (l) {
-                  l.classList.remove("is-active");
-                });
-                byId[headings[i].id].classList.add("is-active");
-                break;
-              }
-            }
-          },
-          { rootMargin: "-90px 0px -70% 0px" },
-        );
-
-        headings.forEach(function (heading) {
-          observer.observe(heading);
-        });
-      })();
-    </script>
+    <script src="docs.js" defer></script>
   </body>
 </html>

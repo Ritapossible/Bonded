@@ -176,7 +176,36 @@ them, because an agent that can read its limits can sit exactly inside them.
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Three planes, enforcement layers, data flows, invariants |
 | [MEMORY.md](./MEMORY.md) | Verified research, decisions and why, dead ends, open questions |
 | [SKILL.md](./SKILL.md) | Binance Skills Hub package — tool contract, and how an agent should behave when denied |
-| [site/](./site) | Static landing page and documentation site. No build step — open `site/index.html`, or `npx serve site` |
+| [site/](./site) | Landing page and documentation site. See [Deploying the site](#deploying-the-site) |
+
+## Deploying the site
+
+`site/` is three static pages — landing, docs and 404 — with one stylesheet and one script.
+No framework, no bundler. Open `site/index.html` directly, or serve the directory.
+
+It deploys to **Vercel** from the repository root, with no configuration in the dashboard:
+
+```bash
+npx vercel        # preview
+npx vercel --prod # production
+```
+
+`vercel.json` sets everything — no install step (the site has no dependencies), a build that
+is only `node scripts/build-site.mjs`, and `dist-site/` as the output.
+
+The build exists for one reason. Open Graph requires an **absolute** `og:image`, and a
+hardcoded one points at the wrong host the moment the project is renamed or a domain is
+added. So the source keeps a `__SITE_URL__` placeholder and the build resolves it from
+`VERCEL_PROJECT_PRODUCTION_URL`, falling back to `SITE_URL` if you set it explicitly. The
+build **fails** if it finds no placeholder, rather than shipping a card that points nowhere.
+
+Also configured there: `cleanUrls` (so the docs page is `/docs`), and response headers —
+a `Content-Security-Policy` with no `unsafe-inline` (which is why the docs script lives in
+`site/docs.js` and not in a `<script>` tag), `nosniff`, `Referrer-Policy`,
+`Permissions-Policy` and HSTS.
+
+`site/og.png` is generated from [`scripts/og-card.html`](./scripts/og-card.html); regenerate
+it by screenshotting that file at 1200×630.
 
 ## Environment
 

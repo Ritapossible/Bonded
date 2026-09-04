@@ -42,6 +42,49 @@ html {
   scroll-padding-top: calc(var(--header-h) + 16px);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Keyboard focus has to be visible on every surface, including the yellow card. */
+:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.brief :focus-visible {
+  outline-color: #0b0e11;
+}
+
+/* Reachable by keyboard, out of the way otherwise. */
+.skip {
+  position: absolute;
+  left: 16px;
+  top: -100px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--yellow);
+  color: #0b0e11;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+
+.skip:focus {
+  top: 16px;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -379,7 +422,7 @@ h2 {
   font-size: 3.1rem;
   font-weight: 700;
   line-height: 1;
-  color: #333a45;
+  color: #414a57;
   letter-spacing: -0.03em;
 }
 
@@ -499,7 +542,7 @@ h2 {
 
 .brief__item span {
   font-size: 0.88rem;
-  color: rgba(11, 14, 17, 0.66);
+  color: rgba(11, 14, 17, 0.75);
 }
 
 /* ---------------------------------------------------------------- limits */
@@ -576,12 +619,44 @@ h2 {
   color: var(--yellow);
 }
 
+/* The rule spans the footer; the text it separates keeps a readable measure. */
 .footer__legal {
   margin-top: 36px;
   padding-top: 24px;
   border-top: 1px solid var(--line);
+}
+
+.footer__legal p {
+  max-width: 76ch;
   font-size: 0.86rem;
-  color: #5e6673;
+  color: #737b88;
+}
+
+/* -------------------------------------------------------------- 404 page */
+
+.notfound {
+  display: flex;
+  align-items: center;
+  min-height: 78vh;
+  padding-top: var(--header-h);
+  text-align: center;
+}
+
+.notfound h1 {
+  margin-top: 16px;
+  max-width: 22ch;
+  font-size: clamp(2.1rem, 5vw, 3.4rem);
+}
+
+.notfound p {
+  max-width: 46ch;
+  margin: 18px auto 0;
+  color: var(--muted);
+  font-size: 1.06rem;
+}
+
+.notfound .hero__cta {
+  margin-top: 34px;
 }
 
 /* ------------------------------------------------------------------ docs */
@@ -699,9 +774,17 @@ h2 {
   line-height: 1.65;
 }
 
-.doc table {
-  width: 100%;
+/* A table wider than the column scrolls inside itself. The page never scrolls
+   sideways, at any width — that is what the wrapper is for. */
+.table-scroll {
   margin: 20px 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.doc table {
+  min-width: 100%;
+  margin: 0;
   border-collapse: collapse;
   font-size: 0.94rem;
 }
@@ -762,14 +845,6 @@ h2 {
   .docs {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
-  }
-
-  /* A table too wide for the phone scrolls itself; the page never does. */
-  .doc table {
-    display: block;
-    width: max-content;
-    max-width: 100%;
-    overflow-x: auto;
   }
 
   .sidebar {

@@ -14,12 +14,24 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F0B90B'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Helvetica,Arial,sans-serif' font-size='20' font-weight='700' fill='%230B0E11'%3EB%3C/text%3E%3C/svg%3E"
     />
 
-    <meta property="og:title" content="BONDED" />
+    <link rel="canonical" href="__SITE_URL__/" />
+
+    <meta property="og:site_name" content="BONDED" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="__SITE_URL__/" />
+    <meta property="og:title" content="BONDED — a mandate gate for AI agents trading Binance" />
     <meta
       property="og:description"
-      content="Going around it is possible. Going around it unnoticed is not."
+      content="An AI agent trading a Binance account gets no credential, only a mandate. Every executed order is reconciled against what was actually authorised."
     />
-    <meta property="og:type" content="website" />
+    <meta property="og:image" content="__SITE_URL__/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="BONDED — going around it is possible, unnoticed is not."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -31,6 +43,7 @@
   </head>
 
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <header class="header">
       <div class="header__pill">
         <a class="brand" href="/">BOND<span>ED</span></a>
@@ -54,7 +67,7 @@
       </div>
     </header>
 
-    <main>
+    <main id="main" tabindex="-1">
       <!-- ------------------------------------------------------------ hero -->
       <section class="hero">
         <div class="hero__shafts" aria-hidden="true"></div>
@@ -385,10 +398,12 @@
             <a href="docs.html#limits">Limits</a>
           </nav>
         </div>
-        <p class="footer__legal">
-          Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
-          advice — BONDED enforces limits and produces no trading recommendations. MIT licensed.
-        </p>
+        <div class="footer__legal">
+          <p>
+            Runs on Binance Spot Testnet. Not affiliated with or endorsed by Binance. Not financial
+            advice — BONDED enforces limits and produces no trading recommendations. MIT licensed.
+          </p>
+        </div>
       </div>
     </footer>
   </body>

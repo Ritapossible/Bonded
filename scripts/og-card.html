@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8" />
+<style>
+  * {
+    margin: 0;
+    box-sizing: border-box;
+  }
+  body {
+    width: 1200px;
+    height: 630px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 72px 80px;
+    background: #0b0e11;
+    color: #eaecef;
+    position: relative;
+    overflow: hidden;
+    font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .shafts {
+    position: absolute;
+    inset: -20% -10%;
+    background: repeating-linear-gradient(
+      100deg,
+      rgba(240, 185, 11, 0.16) 0 1px,
+      transparent 1px 46px
+    );
+    -webkit-mask-image: radial-gradient(120% 90% at 20% 0%, #000 0%, transparent 70%);
+    mask-image: radial-gradient(120% 90% at 20% 0%, #000 0%, transparent 70%);
+  }
+  .row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .mark {
+    font-size: 34px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .mark span {
+    color: #f0b90b;
+  }
+  .badge {
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #f0b90b;
+    background: rgba(240, 185, 11, 0.1);
+    border: 1px solid rgba(240, 185, 11, 0.28);
+  }
+  h1 {
+    position: relative;
+    font-size: 66px;
+    line-height: 1.08;
+    letter-spacing: -0.038em;
+    font-weight: 700;
+  }
+  h1 em {
+    font-style: normal;
+    color: #f0b90b;
+  }
+  p {
+    position: relative;
+    font-size: 24px;
+    line-height: 1.5;
+    color: #848e9c;
+    max-width: 44ch;
+  }
+  .foot {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 19px;
+    color: #5e6673;
+  }
+  .foot b {
+    color: #848e9c;
+    font-weight: 600;
+  }
+</style>
+<div class="shafts"></div>
+<div class="row">
+  <div class="mark">BOND<span>ED</span></div>
+  <div class="badge">Binance Agent OS · Trading Workflows</div>
+</div>
+<div>
+  <h1>Going around it is possible.<br /><em>Unnoticed is not.</em></h1>
+  <p style="margin-top: 26px">
+    A mandate gate and reconciliation layer between AI agents and Binance Spot.
+  </p>
+</div>
+<div class="foot">
+  <span><b>Mandate</b> · <b>Gate</b> · <b>Reconcile</b></span>
+  <span>github.com/Ritapossible/Bonded</span>
+</div>
