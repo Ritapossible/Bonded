@@ -65,6 +65,9 @@ function errorResult(payload: unknown): {
   return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }], isError: true };
 }
 
+/** Uppercase alphanumeric, matching Binance's own symbol convention. */
+const SYMBOL_PATTERN = /^[A-Z0-9]{2,20}$/;
+
 const orderShape = {
   symbol: z.string().describe("Trading pair, e.g. ETHUSDT"),
   side: z.enum(["BUY", "SELL"]),
@@ -101,9 +104,20 @@ function toIntent(
 ): { ok: true; intent: OrderIntent } | { ok: false; message: string } {
   const symbol = args.symbol.toUpperCase();
 
+  // L3': the symbol shape is checked here rather than being left to the gate, so a
+  // typo is a usage error instead of an entry consumed from the decision log.
+  if (!SYMBOL_PATTERN.test(symbol)) {
+    return { ok: false, message: `not a valid Binance symbol: ${args.symbol}` };
+  }
+
   if (args.type === "LIMIT") {
     if (args.quantity === undefined || args.price === undefined) {
       return { ok: false, message: "a LIMIT order requires both quantity and price" };
+    }
+    // L2': silently ignoring it would fill an order the agent did not ask for. The
+    // MARKET path already errors when both are supplied; this is the same rule.
+    if (args.quoteOrderQty !== undefined) {
+      return { ok: false, message: "quoteOrderQty applies to MARKET orders, not LIMIT" };
     }
     const quantity = parsePositiveDecimal(args.quantity, "quantity");
     if (!quantity.ok) return { ok: false, message: quantity.error.message };

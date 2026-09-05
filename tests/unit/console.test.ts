@@ -20,7 +20,7 @@ import type { TradingEngine } from "../../src/engine/trading-engine.js";
 import { createSilentLogger } from "../../src/observability/logger.js";
 import type { Finding } from "../../src/reconcile/classify.js";
 import { ReconciliationOutcome } from "../../src/reconcile/classify.js";
-import type { OrderSource } from "../../src/reconcile/order-source.js";
+import type { OrderSource, OrderSourceCoverage } from "../../src/reconcile/order-source.js";
 import type { Reconciler } from "../../src/reconcile/reconciler.js";
 
 const NOW = Date.parse("2026-09-06T12:00:00.000Z");
@@ -70,6 +70,7 @@ const FINDING: Finding = {
     price: decimalUnsafe("0"),
     origQty: decimalUnsafe("5"),
     cummulativeQuoteQty: decimalUnsafe("0"),
+    timeInForce: "GTC",
     executedQty: decimalUnsafe("5"),
     observedAtMs: NOW,
     source: "stream",
@@ -92,11 +93,15 @@ function stubReconciler(findings: Finding[] = []): Reconciler {
   return {
     stats: { observed: 3, authorised: 2, findings: findings.length, lastObservedAtMs: NOW },
     findings,
+    findingsDropped: 0,
   } as unknown as Reconciler;
 }
 
-const stubSource = (name: string, healthy: boolean): OrderSource =>
-  ({ name, healthy, lastHealthyAtMs: NOW }) as OrderSource;
+const stubSource = (
+  name: string,
+  healthy: boolean,
+  coverage: OrderSourceCoverage = name === "stream" ? "account" : "symbols",
+): OrderSource => ({ name, healthy, coverage, lastHealthyAtMs: NOW }) as OrderSource;
 
 describe("console state", () => {
   it("shows the mandate's thresholds, unlike the agent's view", () => {
@@ -125,8 +130,8 @@ describe("console state", () => {
     });
     expect(state.bond).toEqual({ state: "BURNED", reason: "FOREIGN: bypass detected" });
     expect(state.reconciliation.sources).toEqual([
-      { name: "stream", healthy: true },
-      { name: "poll", healthy: false },
+      { name: "stream", healthy: true, coverage: "account" },
+      { name: "poll", healthy: false, coverage: "symbols" },
     ]);
     expect(state.findings[0]?.outcome).toBe("FOREIGN");
   });
@@ -373,5 +378,51 @@ describe("DNS rebinding", () => {
     const response = await get("/");
     expect(response.headers["x-frame-options"]).toBe("DENY");
     expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  });
+});
+
+describe("what the owner's screen shows", () => {
+  // The audit's M3' and M4'. The payload carried each source's health but not its
+  // coverage, so during a stream outage the owner saw "poll: healthy" and could not
+  // tell that detection had narrowed to the mandate's own symbols — the exact state
+  // this screen exists to make visible. And every finding was serialised into every
+  // frame, unbounded, in precisely the scenario that produces thousands of them.
+  it("reports degraded coverage when only the symbol-scoped source is live", () => {
+    const state = buildConsoleState({
+      engine: stubEngine(),
+      reconciler: stubReconciler(),
+      feed: new ActivityFeed(),
+      orderSources: [stubSource("stream", false), stubSource("poll", true)],
+      env: "testnet",
+      startedAtMs: NOW,
+    });
+    expect(state.reconciliation.coverage).toBe("partial");
+    expect(state.reconciliation.sources.map((s) => s.coverage)).toEqual(["account", "symbols"]);
+  });
+
+  it("reports full coverage when the account-wide source is live", () => {
+    const state = buildConsoleState({
+      engine: stubEngine(),
+      reconciler: stubReconciler(),
+      feed: new ActivityFeed(),
+      orderSources: [stubSource("stream", true), stubSource("poll", true)],
+      env: "testnet",
+      startedAtMs: NOW,
+    });
+    expect(state.reconciliation.coverage).toBe("full");
+  });
+
+  it("caps the findings it serialises and says how many it left out", () => {
+    const many = Array.from({ length: 250 }, () => FINDING);
+    const state = buildConsoleState({
+      engine: stubEngine(),
+      reconciler: stubReconciler(many),
+      feed: new ActivityFeed(),
+      orderSources: [stubSource("poll", true)],
+      env: "testnet",
+      startedAtMs: NOW,
+    });
+    expect(state.findings).toHaveLength(100);
+    expect(state.findingsOmitted).toBe(150);
   });
 });

@@ -86,6 +86,10 @@ export const CONSOLE_HTML = `<!doctype html>
   .stat.alert .n { color: var(--bad); }
 
   .sources { display: flex; gap: 16px; font-size: 13px; color: var(--muted); }
+  .cov { margin-top: 8px; font-size: 13px; }
+  .cov.ok   { color: var(--ok); }
+  .cov.warn { color: var(--warn); }
+  .cov.bad  { color: var(--bad); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
   .dot.up { background: var(--ok); } .dot.down { background: var(--bad); }
 
@@ -139,6 +143,7 @@ export const CONSOLE_HTML = `<!doctype html>
       <div class="stat" id="sFindingsBox"><div class="n" id="sFindings">0</div><div class="l">findings</div></div>
     </div>
     <div class="sources" id="sourceList"></div>
+    <div class="cov" id="coverage"></div>
   </section>
 
   <section class="panel" id="findings" hidden>
@@ -213,9 +218,25 @@ export const CONSOLE_HTML = `<!doctype html>
     r.sources.forEach(function (source) {
       var wrap = el("span");
       wrap.append(el("span", "dot " + (source.healthy ? "up" : "down")));
-      wrap.append(document.createTextNode(source.name + (source.healthy ? " live" : " down")));
+      var scope = source.coverage === "account" ? "account-wide" : "mandate symbols";
+      wrap.append(document.createTextNode(source.name + (source.healthy ? " live" : " down") + " · " + scope));
       list.append(wrap);
     });
+
+    // Health alone hid the state that matters: with the stream down the poller still
+    // reads live, while detection has narrowed to the mandate's own symbols.
+    var cov = document.getElementById("coverage");
+    if (r.coverage === "full") {
+      text(cov, "coverage: account-wide");
+      cov.className = "cov ok";
+    } else if (r.coverage === "partial") {
+      text(cov, "coverage: DEGRADED — mandate symbols only, orders on other symbols are not observable");
+      cov.className = "cov warn";
+    } else {
+      text(cov, "coverage: NONE — no source is delivering");
+      cov.className = "cov bad";
+    }
+
     var summary = document.getElementById("sources");
     text(summary, "last seen " + clockOf(r.lastObservedAt));
   }
@@ -226,6 +247,10 @@ export const CONSOLE_HTML = `<!doctype html>
     list.replaceChildren();
     if (!state.findings.length) { panel.hidden = true; return; }
     panel.hidden = false;
+
+    if (state.findingsOmitted > 0) {
+      list.append(el("div", "omitted", state.findingsOmitted + " further findings not shown"));
+    }
 
     state.findings.forEach(function (f) {
       var box = el("div", "finding");

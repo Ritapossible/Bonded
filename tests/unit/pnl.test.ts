@@ -13,7 +13,11 @@ import { computeRealisedPnl, type Trade } from "../../src/domain/pnl.js";
 
 const DAY = Date.parse("2026-09-06T12:00:00.000Z");
 const YESTERDAY = Date.parse("2026-09-05T12:00:00.000Z");
-const QUOTE = new Set(["USDT"]);
+/** Symbol -> its base and quote asset, as exchangeInfo reports them. */
+const QUOTE = new Map([
+  ["ETHUSDT", { baseAsset: "ETH", quoteAsset: "USDT" }],
+  ["BTCUSDT", { baseAsset: "BTC", quoteAsset: "USDT" }],
+]);
 
 let nextId = 1;
 
@@ -221,5 +225,114 @@ describe("computeRealisedPnl", () => {
         },
       ),
     );
+  });
+});
+
+describe("commission in a third asset", () => {
+  /**
+   * The audit's M2'. The code asked "is the commission asset a quote asset?" and, if
+   * not, treated it as base-asset commission — subtracting it from the base quantity.
+   * With Binance's BNB fee discount enabled, very common, that subtracted a BNB amount
+   * from an ETH quantity, corrupting the average cost that both loss limits rest on.
+   */
+  it("does not subtract a BNB commission from an ETH quantity", () => {
+    const withBnb = [
+      trade({
+        isBuyer: true,
+        price: decimalUnsafe("2000"),
+        quantity: decimalUnsafe("1"),
+        commission: decimalUnsafe("0.5"),
+        commissionAsset: "BNB",
+      }),
+      trade({ isBuyer: false, price: decimalUnsafe("2000"), quantity: decimalUnsafe("1") }),
+    ];
+    const withoutFee = [
+      trade({ isBuyer: true, price: decimalUnsafe("2000"), quantity: decimalUnsafe("1") }),
+      trade({ isBuyer: false, price: decimalUnsafe("2000"), quantity: decimalUnsafe("1") }),
+    ];
+
+    const bnb = computeRealisedPnl(withBnb, DAY, QUOTE);
+    const plain = computeRealisedPnl(withoutFee, DAY, QUOTE);
+
+    // Buying and selling one ETH at the same price realises nothing. Before the fix the
+    // BNB amount came off the acquired quantity, so 0.5 ETH had no basis and the figure
+    // was wrong in both the quantity and the money.
+    expect(bnb.realised).toBe(plain.realised);
+    expect(bnb.unbasisedQuantity.size).toBe(0);
+  });
+
+  it("reports the BNB commission rather than folding it in", () => {
+    const pnl = computeRealisedPnl(
+      [
+        trade({
+          isBuyer: true,
+          price: decimalUnsafe("2000"),
+          quantity: decimalUnsafe("1"),
+          commission: decimalUnsafe("0.5"),
+          commissionAsset: "BNB",
+        }),
+      ],
+      DAY,
+      QUOTE,
+    );
+    expect(pnl.uncountedCommission.get("BNB")).toBe("0.5");
+    // Not counted as a quote-asset cost, because it is not one.
+    expect(pnl.commission).toBe("0");
+  });
+
+  it("still treats base-asset commission as fewer units acquired", () => {
+    const pnl = computeRealisedPnl(
+      [
+        trade({
+          isBuyer: true,
+          price: decimalUnsafe("2000"),
+          quantity: decimalUnsafe("1"),
+          commission: decimalUnsafe("0.1"),
+          commissionAsset: "ETH",
+        }),
+        trade({ isBuyer: false, price: decimalUnsafe("2000"), quantity: decimalUnsafe("1") }),
+      ],
+      DAY,
+      QUOTE,
+    );
+    // Only 0.9 ETH was acquired, so selling 1 leaves 0.1 without a basis.
+    expect(pnl.unbasisedQuantity.get("ETHUSDT")).toBe("0.1");
+    expect(pnl.uncountedCommission.size).toBe(0);
+  });
+
+  it("still subtracts quote-asset commission directly", () => {
+    const pnl = computeRealisedPnl(
+      [
+        trade({ isBuyer: true, price: decimalUnsafe("2000"), quantity: decimalUnsafe("1") }),
+        trade({
+          isBuyer: false,
+          price: decimalUnsafe("2000"),
+          quantity: decimalUnsafe("1"),
+          commission: decimalUnsafe("2"),
+          commissionAsset: "USDT",
+        }),
+      ],
+      DAY,
+      QUOTE,
+    );
+    expect(pnl.realised).toBe("-2");
+    expect(pnl.commission).toBe("2");
+  });
+
+  it("is case-insensitive about the commission asset", () => {
+    const pnl = computeRealisedPnl(
+      [
+        trade({
+          isBuyer: false,
+          price: decimalUnsafe("2000"),
+          quantity: decimalUnsafe("0"),
+          commission: decimalUnsafe("1"),
+          commissionAsset: "usdt",
+        }),
+      ],
+      DAY,
+      QUOTE,
+    );
+    expect(pnl.commission).toBe("1");
   });
 });

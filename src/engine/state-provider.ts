@@ -263,10 +263,19 @@ export class StateProvider {
       });
       if (failure !== undefined) return failure;
 
+      // Per symbol, so commission can be told apart three ways: the quote asset (a
+      // direct cost), the base asset (fewer units acquired), or something else entirely
+      // — BNB, usually — which is a real cost in a currency this path will not convert.
+      const assets = new Map(
+        [...this.#symbolRules.entries()].map(([symbol, rules]) => [
+          symbol,
+          { baseAsset: rules.baseAsset, quoteAsset: rules.quoteAsset },
+        ]),
+      );
       const quoteAssets = new Set([...this.#symbolRules.values()].map((rules) => rules.quoteAsset));
       const allTrades = [...this.#trades.values()].flat();
       const observedAtMs = this.#clock.now();
-      const pnl = computeRealisedPnl(allTrades, observedAtMs, quoteAssets);
+      const pnl = computeRealisedPnl(allTrades, observedAtMs, assets);
 
       // The drawdown cap is a percentage of what the account actually holds, so the
       // balance has to be *observed*, not whatever happened to be cached when a
@@ -295,7 +304,8 @@ export class StateProvider {
           realised: pnl.realised,
           quoteBalance,
           quoteBalanceKnown,
-          incomplete: pnl.unbasisedQuantity.size > 0,
+          // Either gap means the figure understates activity, and the operator is told.
+          incomplete: pnl.unbasisedQuantity.size > 0 || pnl.uncountedCommission.size > 0,
         },
       };
       return ok(undefined);

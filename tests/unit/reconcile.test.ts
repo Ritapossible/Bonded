@@ -62,6 +62,7 @@ function observed(overrides: Partial<ObservedOrder> = {}): ObservedOrder {
     price: decimalUnsafe("2000"),
     origQty: decimalUnsafe("0.1"),
     cummulativeQuoteQty: decimalUnsafe("0"),
+    timeInForce: "GTC",
     executedQty: decimalUnsafe("0.1"),
     observedAtMs: NOW,
     source: "stream",

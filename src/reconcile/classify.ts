@@ -146,6 +146,12 @@ function parameterMismatches(order: ObservedOrder, authorisation: Authorisation)
       `quoteOrderQty: authorised ${expected.quoteOrderQty}, executed ${order.cummulativeQuoteQty}`,
     );
   }
+  // BONDED sends GTC and only GTC. An order that executed IOC or FOK is not the order
+  // that was authorised, however well the other fields line up. Blank means the source
+  // did not report it, which is not evidence of a change.
+  if (order.type === "LIMIT" && order.timeInForce !== "" && order.timeInForce !== "GTC") {
+    mismatches.push(`timeInForce: authorised GTC, executed ${order.timeInForce}`);
+  }
   return mismatches;
 }
 

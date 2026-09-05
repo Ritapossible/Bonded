@@ -13,7 +13,11 @@
  * - A **sell** realises `(price − averageCost) × quantity` and reduces the position.
  * - **Commission** paid in the quote asset is subtracted from realised PnL. Commission
  *   paid in the base asset reduces the quantity acquired, which is the same thing
- *   expressed in the other unit.
+ *   expressed in the other unit. Commission paid in **neither** — Binance's BNB fee
+ *   discount is the common case — is a real cost in a third currency, and converting it
+ *   would need a live cross rate on this path. It is reported as `uncountedCommission`
+ *   rather than folded in, because the earlier code treated it as base-asset commission
+ *   and subtracted a BNB amount from an ETH quantity.
  * - Only trades that occurred **today, UTC** contribute to the daily figure. Earlier
  *   trades are replayed solely to establish the cost basis.
  *
@@ -65,6 +69,14 @@ export interface RealisedPnl {
    * present an incomplete number as complete.
    */
   readonly unbasisedQuantity: ReadonlyMap<string, DecimalString>;
+  /**
+   * Commission paid today in an asset that is neither the base nor the quote of its
+   * symbol, by asset. BNB, in practice.
+   *
+   * Non-empty means the figure understates costs by this much, in a currency this
+   * module deliberately does not convert.
+   */
+  readonly uncountedCommission: ReadonlyMap<string, DecimalString>;
 }
 
 interface Position {
@@ -81,14 +93,20 @@ interface Position {
  * a caller merging several symbols' histories cannot corrupt the result by interleaving
  * them wrongly.
  */
+export interface SymbolAssets {
+  readonly baseAsset: string;
+  readonly quoteAsset: string;
+}
+
 export function computeRealisedPnl(
   trades: readonly Trade[],
   nowMs: number,
-  quoteAssets: ReadonlySet<string>,
+  assets: ReadonlyMap<string, SymbolAssets>,
 ): RealisedPnl {
   const dayKey = utcDayKey(nowMs);
   const positions = new Map<string, Position>();
   const unbasised = new Map<string, DecimalString>();
+  const uncounted = new Map<string, DecimalString>();
 
   let realised = ZERO;
   let commission = ZERO;
@@ -102,11 +120,18 @@ export function computeRealisedPnl(
     const today = utcDayKey(trade.timeMs) === dayKey;
     const position = positions.get(trade.symbol) ?? { quantity: ZERO, averageCost: ZERO };
 
+    const symbolAssets = assets.get(trade.symbol);
+    const commissionAsset = trade.commissionAsset.toUpperCase();
+    const inQuote =
+      symbolAssets !== undefined && commissionAsset === symbolAssets.quoteAsset.toUpperCase();
+    const inBase =
+      symbolAssets !== undefined && commissionAsset === symbolAssets.baseAsset.toUpperCase();
+
     if (trade.isBuyer) {
-      // Commission charged in the base asset means fewer units actually acquired.
-      const acquired = quoteAssets.has(trade.commissionAsset)
-        ? trade.quantity
-        : subtract(trade.quantity, trade.commission);
+      // Only base-asset commission means fewer units acquired. A commission in some
+      // third asset is not denominated in this quantity's units and must not be
+      // subtracted from it.
+      const acquired = inBase ? subtract(trade.quantity, trade.commission) : trade.quantity;
 
       const newQuantity = add(position.quantity, acquired);
       if (compare(newQuantity, ZERO) > 0) {
@@ -131,10 +156,18 @@ export function computeRealisedPnl(
     }
 
     // Quote-asset commission is a direct cost; base-asset commission is already handled
-    // above by reducing the acquired quantity.
-    if (today && quoteAssets.has(trade.commissionAsset)) {
-      realised = subtract(realised, trade.commission);
-      commission = add(commission, trade.commission);
+    // above by reducing the acquired quantity. Anything else is a cost this module
+    // cannot express in quote units, so it is reported instead of guessed at.
+    if (today && greaterThan(trade.commission, ZERO)) {
+      if (inQuote) {
+        realised = subtract(realised, trade.commission);
+        commission = add(commission, trade.commission);
+      } else if (!inBase) {
+        uncounted.set(
+          commissionAsset,
+          add(uncounted.get(commissionAsset) ?? ZERO, trade.commission),
+        );
+      }
     }
 
     positions.set(trade.symbol, position);
@@ -147,6 +180,7 @@ export function computeRealisedPnl(
     commission,
     tradeCount,
     unbasisedQuantity: unbasised,
+    uncountedCommission: uncounted,
   };
 }
 

@@ -212,6 +212,17 @@ async function guardClockSkew(ctx: GuardContext): Promise<GuardResult> {
   const localMidpoint = before + (after - before) / 2;
   const skew = Math.round(time.value.serverTime - localMidpoint);
 
+  // A response the client accepted but that carries no usable timestamp yields NaN, and
+  // `Math.abs(NaN) > limit` is false — so the guard reported PASS on a check it had not
+  // performed. In a boot guard that is the one outcome that must be unreachable.
+  if (!Number.isFinite(skew)) {
+    return {
+      name: "clockSkew",
+      status: "FAIL",
+      detail: "the exchange did not return a usable server time",
+    };
+  }
+
   if (Math.abs(skew) > MAX_CLOCK_SKEW_MS) {
     return {
       name: "clockSkew",

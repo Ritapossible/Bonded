@@ -12,8 +12,9 @@
 
 import type { Mandate } from "../domain/mandate.js";
 import type { TradingEngine } from "../engine/trading-engine.js";
+import { currentCoverage, type AuditCoverage } from "../reconcile/audit-path.js";
 import type { Finding } from "../reconcile/classify.js";
-import type { OrderSource } from "../reconcile/order-source.js";
+import type { OrderSource, OrderSourceCoverage } from "../reconcile/order-source.js";
 import type { Reconciler } from "../reconcile/reconciler.js";
 import type { ActivityEntry, ActivityFeed } from "./activity.js";
 
@@ -40,10 +41,17 @@ export interface ConsoleState {
     readonly observed: number;
     readonly authorised: number;
     readonly findings: number;
+    readonly coverage: AuditCoverage;
     readonly lastObservedAt: string | undefined;
-    readonly sources: readonly { readonly name: string; readonly healthy: boolean }[];
+    readonly sources: readonly {
+      readonly name: string;
+      readonly healthy: boolean;
+      readonly coverage: OrderSourceCoverage;
+    }[];
   };
   readonly findings: readonly FindingView[];
+  /** Findings not shown: beyond the render cap, or dropped at the reconciler's cap. */
+  readonly findingsOmitted: number;
   readonly activity: readonly ActivityEntry[];
 }
 
@@ -86,6 +94,9 @@ function findingView(finding: Finding): FindingView {
   };
 }
 
+/** Most findings rendered at once. Beyond this the screen reports a count. */
+const MAX_RENDERED_FINDINGS = 100;
+
 export interface ConsoleStateSources {
   readonly engine: TradingEngine;
   readonly reconciler: Reconciler;
@@ -123,9 +134,21 @@ export function buildConsoleState(sources: ConsoleStateSources): ConsoleState {
         stats.lastObservedAtMs === undefined
           ? undefined
           : new Date(stats.lastObservedAtMs).toISOString(),
-      sources: orderSources.map((source) => ({ name: source.name, healthy: source.healthy })),
+      sources: orderSources.map((source) => ({
+        name: source.name,
+        healthy: source.healthy,
+        // Health alone hid the state the owner most needs to see: with the stream down
+        // the poller still reads "healthy" while detection has narrowed to the mandate's
+        // own symbols, which is precisely when the screen must say so.
+        coverage: source.coverage,
+      })),
+      coverage: currentCoverage(orderSources),
     },
-    findings: reconciler.findings.map(findingView),
+    // Capped. The list is rebuilt on every refresh and serialised into every event
+    // frame, and it grows without bound in exactly the scenario this screen is for.
+    findings: reconciler.findings.slice(0, MAX_RENDERED_FINDINGS).map(findingView),
+    findingsOmitted:
+      Math.max(0, reconciler.findings.length - MAX_RENDERED_FINDINGS) + reconciler.findingsDropped,
     activity: feed.entries,
   };
 }

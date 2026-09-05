@@ -39,6 +39,8 @@ export interface ObservedOrder {
    * 100,000 and was classified AUTHORISED — the one outcome that does not burn the bond.
    */
   readonly cummulativeQuoteQty: DecimalString;
+  /** How long the order was to remain live. BONDED authorises GTC and nothing else. */
+  readonly timeInForce: string;
   /** Exchange-side event time, in epoch milliseconds. */
   readonly observedAtMs: number;
   /** Which account this observation came from — useful in findings and logs. */
@@ -70,6 +72,8 @@ const ExecutionReportSchema = z.object({
   C: z.string().optional(),
   /** Cumulative quote-asset value transacted. */
   Z: numericString.optional(),
+  /** Time in force. */
+  f: z.string().optional(),
 });
 
 const AllOrdersEntrySchema = z.object({
@@ -83,6 +87,7 @@ const AllOrdersEntrySchema = z.object({
   origQty: numericString,
   executedQty: numericString,
   cummulativeQuoteQty: numericString.optional(),
+  timeInForce: z.string().optional(),
   time: z.number().optional(),
   updateTime: z.number().optional(),
 });
@@ -121,6 +126,7 @@ export function parseExecutionReport(raw: unknown): Result<ObservedOrder, Bonded
     // Absent on some event shapes; an unknown amount is zero, and the comparison
     // treats a zero it cannot vouch for as a mismatch rather than a match.
     cummulativeQuoteQty: (event.Z ?? "0") as DecimalString,
+    timeInForce: event.f ?? "",
     observedAtMs: event.E,
     source: "stream",
   });
@@ -149,6 +155,7 @@ export function parseAllOrders(raw: unknown): Result<ObservedOrder[], BondedErro
       origQty: order.origQty as DecimalString,
       executedQty: order.executedQty as DecimalString,
       cummulativeQuoteQty: (order.cummulativeQuoteQty ?? "0") as DecimalString,
+      timeInForce: order.timeInForce ?? "",
       observedAtMs: order.updateTime ?? order.time ?? 0,
       source: "poll",
     });
