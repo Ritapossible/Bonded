@@ -203,6 +203,44 @@ them, because an agent that can read its limits can sit exactly inside them.
 | [DEMO.md](./DEMO.md) | Recording runbook: setup, window layout, the four beats, and how to reset between takes |
 | [site/](./site) | Landing page and documentation site. See [Deploying the site](#deploying-the-site) |
 
+## Verifying a run without trusting it
+
+The demo shows a bypass being caught. You have no reason to believe it — every frame
+could be staged. So the log the run produced is published, and anyone can check it:
+
+```bash
+npx bonded verify examples/demo-decisions.jsonl
+```
+
+Holding nothing but the file, that verifies the hash chain from genesis, that sequence
+numbers are contiguous, that every record cites the same mandate hash — and prints the
+exchange order ids so you can check them against Binance yourself.
+
+It also states what it did **not** check. Whether each stamped client order id is
+authentic needs the HMAC secret, which is the operator's; pass `--secret` if you hold it.
+And a log is a claim about what BONDED authorised, never proof of what the exchange did.
+
+Edit one field, delete one record, or append one you invented, and it fails:
+
+```
+  NOT VERIFIED: decision log hash chain is broken
+  {"lineNumber":3,"seq":2,"expectedPrevHash":"287d…","actualPrevHash":"3563…"}
+```
+
+## Attacking it yourself
+
+```bash
+npm run redteam
+```
+
+Runs a set of documented attacks against a live instance on Spot Testnet and prints what
+happened to each: oversized orders, symbols outside the allowlist, sub-lot quantities, a
+client id forged into BONDED's namespace, and a raw API order with no BONDED in the path
+at all. The last one fills — that is the point — and then the reconciler finds it, the
+bond burns, and every later order is refused.
+
+Testnet only, with no override, for the same reason as `scripts/bypass-order.mjs`.
+
 ## Deploying the site
 
 `site/` is three static pages — landing, docs and 404 — with one stylesheet and one script.

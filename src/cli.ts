@@ -13,6 +13,7 @@
  */
 
 import { checkQuoteAssets } from "./domain/quote-asset.js";
+import { formatVerification, verifyDecisionLog } from "./verify/verify-log.js";
 import { isAuditPathAdequate, resolveStartupCoverage } from "./reconcile/audit-path.js";
 import { readFile } from "node:fs/promises";
 import { DecisionLog } from "./audit/decision-log.js";
@@ -337,8 +338,43 @@ async function main(): Promise<number> {
   return 0;
 }
 
+/**
+ * `bonded verify <log> [--secret <hex>]`
+ *
+ * A subcommand rather than a separate binary so that the thing which verifies a log
+ * ships with the thing that wrote it, at the same version.
+ */
+async function verifyCommand(argv: readonly string[]): Promise<number> {
+  const path = argv[0];
+  if (path === undefined || path.startsWith("-")) {
+    emit("usage: bonded verify <decision-log.jsonl> [--secret <hmac-secret>]");
+    return 78; // EX_CONFIG
+  }
+
+  const secretFlag = argv.indexOf("--secret");
+  const secret = secretFlag === -1 ? undefined : argv[secretFlag + 1];
+  if (secretFlag !== -1 && secret === undefined) {
+    emit("--secret needs a value");
+    return 78;
+  }
+
+  const result = await verifyDecisionLog(path, secret === undefined ? {} : { hmacSecret: secret });
+  if (!result.ok) {
+    emit(`\nBONDED decision log — ${path}\n`);
+    emit(`  NOT VERIFIED: ${result.error.message}`);
+    emit(`  ${JSON.stringify(result.error.details)}\n`);
+    return 1;
+  }
+
+  emit(formatVerification(path, result.value));
+  // A log citing more than one mandate is not corrupt, but it is not a clean bill of
+  // health either, and the exit code should not say it is.
+  return result.value.mandateHashes.length > 1 ? 1 : 0;
+}
+
 try {
-  const code = await main();
+  const [subcommand, ...rest] = process.argv.slice(2);
+  const code = subcommand === "verify" ? await verifyCommand(rest) : await main();
   if (code !== 0) process.exit(code);
 } catch (cause: unknown) {
   process.stderr.write(`fatal: ${describeUnknownError(cause)}\n`);

@@ -129,6 +129,13 @@ svg {
 
 /* ---------------------------------------------------------------- header */
 
+/* The mark: brackets holding something. The mandate is the brackets — fixed, drawn in
+   the brand colour — and what they enclose is whatever the agent is doing inside them.
+   Legible at 16px, which is the only size a favicon ever gets judged at. */
+.mark {
+  flex: none;
+}
+
 .header {
   position: fixed;
   inset: 16px 0 auto;
@@ -152,12 +159,15 @@ svg {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.brand span {
+.brand__word span {
   color: var(--yellow);
 }
 
@@ -272,17 +282,16 @@ svg {
   position: relative;
 }
 
+/* Plain, not a pill. A label above the headline, in the same key as the section
+   eyebrows, so the hero does not open with a badge competing for attention. */
 .badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 18px;
-  border: 1px solid rgba(240, 185, 11, 0.35);
-  border-radius: 999px;
-  background: var(--yellow-wash);
+  margin: 0;
   color: var(--yellow);
-  font-size: 14px;
-  font-weight: 500;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 h1 {
@@ -1047,9 +1056,8 @@ h2 {
   }
 
   .badge {
-    padding: 7px 14px;
-    font-size: 12.5px;
-    line-height: 1.3;
+    font-size: 11.5px;
+    letter-spacing: 0.13em;
   }
 
   h1 {
