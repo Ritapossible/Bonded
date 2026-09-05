@@ -140,6 +140,7 @@ function parameterMismatches(order: ObservedOrder, authorisation: Authorisation)
   // it cannot buy a whole lot, so overspend is the mismatch — underspend is normal.
   if (
     expected.quoteOrderQty !== undefined &&
+    order.cummulativeQuoteQty !== undefined &&
     greaterThan(order.cummulativeQuoteQty, expected.quoteOrderQty)
   ) {
     mismatches.push(
@@ -224,6 +225,15 @@ export function classify(input: ClassifyInput): Finding {
         "this indicates either a truncated decision log or a second instance sharing the HMAC secret; both need investigating",
       ],
     };
+  }
+
+  // A size that could not be read is not a size that matched. Saying so is the whole
+  // point of carrying uncertainty alongside the verdict.
+  const expected = authorisedParameters(authorisation.intent);
+  if (expected.quoteOrderQty !== undefined && order.cummulativeQuoteQty === undefined) {
+    uncertainty.push(
+      "the source did not report a quote-asset amount, so the size of this order was not checked against the authorisation",
+    );
   }
 
   const mismatches = parameterMismatches(order, authorisation);

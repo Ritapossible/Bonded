@@ -404,6 +404,35 @@ describe("classification robustness", () => {
     expect(finding.explanation).toContain("quoteOrderQty");
   });
 
+  it("says so when the source reported no quote amount to check", () => {
+    // Found reviewing the fix above: defaulting the absent field to "0" made it read as
+    // "spent nothing", which passes every overspend check there is — silently
+    // reinstating the gap the fix had just closed. Absent is not zero.
+    const intent: OrderIntent = {
+      kind: "MARKET_QUOTE",
+      symbol: "ETHUSDT",
+      side: "BUY",
+      quoteOrderQty: decimalUnsafe("100"),
+    };
+    const record = authorisedRecord(13, intent);
+    const index = new AuthorisationIndex();
+    index.record(record);
+
+    const unreported = observed({ clientOrderId: record.clientOrderId ?? "", type: "MARKET" });
+    delete (unreported as { cummulativeQuoteQty?: unknown }).cummulativeQuoteQty;
+
+    const finding = classify({
+      order: unreported,
+      hmacSecret: SECRET,
+      mandateHash: MANDATE,
+      authorisation: index.lookup(unreported.clientOrderId),
+    });
+    // Not a mismatch — a missing field is not evidence of an overspend — but the
+    // finding must not imply the size was verified.
+    expect(finding.outcome).toBe(ReconciliationOutcome.AUTHORISED);
+    expect(finding.uncertainty.join(" ")).toContain("was not checked");
+  });
+
   it("accepts a quote-denominated order that spent no more than authorised", () => {
     // Binance may spend slightly less when it cannot buy a whole lot. Underspend is
     // normal; only overspend is a mismatch.

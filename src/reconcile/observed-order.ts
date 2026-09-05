@@ -32,13 +32,17 @@ export interface ObservedOrder {
   readonly origQty: DecimalString;
   readonly executedQty: DecimalString;
   /**
-   * Quote-asset value actually transacted.
+   * Quote-asset value actually transacted, when the source reported it.
    *
    * Carried because a quote-denominated market order has no base quantity to compare:
    * without this, an authorisation to spend 100 USDT matched an order that spent
    * 100,000 and was classified AUTHORISED — the one outcome that does not burn the bond.
+   *
+   * Optional, and deliberately not defaulted to zero. Zero means "spent nothing", which
+   * passes every overspend check there is; an absent field means "not reported", which
+   * has to be said out loud rather than silently read as compliance.
    */
-  readonly cummulativeQuoteQty: DecimalString;
+  readonly cummulativeQuoteQty?: DecimalString;
   /** How long the order was to remain live. BONDED authorises GTC and nothing else. */
   readonly timeInForce: string;
   /** Exchange-side event time, in epoch milliseconds. */
@@ -123,9 +127,7 @@ export function parseExecutionReport(raw: unknown): Result<ObservedOrder, Bonded
     price: event.p as DecimalString,
     origQty: event.q as DecimalString,
     executedQty: event.z as DecimalString,
-    // Absent on some event shapes; an unknown amount is zero, and the comparison
-    // treats a zero it cannot vouch for as a mismatch rather than a match.
-    cummulativeQuoteQty: (event.Z ?? "0") as DecimalString,
+    ...(event.Z === undefined ? {} : { cummulativeQuoteQty: event.Z as DecimalString }),
     timeInForce: event.f ?? "",
     observedAtMs: event.E,
     source: "stream",
@@ -154,7 +156,9 @@ export function parseAllOrders(raw: unknown): Result<ObservedOrder[], BondedErro
       price: order.price as DecimalString,
       origQty: order.origQty as DecimalString,
       executedQty: order.executedQty as DecimalString,
-      cummulativeQuoteQty: (order.cummulativeQuoteQty ?? "0") as DecimalString,
+      ...(order.cummulativeQuoteQty === undefined
+        ? {}
+        : { cummulativeQuoteQty: order.cummulativeQuoteQty as DecimalString }),
       timeInForce: order.timeInForce ?? "",
       observedAtMs: order.updateTime ?? order.time ?? 0,
       source: "poll",

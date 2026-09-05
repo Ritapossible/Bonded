@@ -252,6 +252,39 @@ the Binance client — the module that signs every request and decides what may 
 appears in `gate.ts`. Documentation and enforcement drift silently, and only that
 comparison catches it.
 
+## 3f. Second audit (2026-09-05)
+
+A full re-audit, treating the previous pass's fixes as unverified. It found one Critical
+regression introduced by that pass and two pre-existing High defects the first audit had
+not reached.
+
+| Finding | What was wrong | Resolution |
+| --- | --- | --- |
+| **C1** | The coverage check sampled `stream.healthy` the instant `start()` returned, before any websocket handshake could complete, so the default configuration exited 1 every time | Wait for every source in parallel with a budget. The decision moved from `cli.ts` into `reconcile/audit-path.ts` — the move *is* the fix, because `cli.ts` had no tests |
+| **H1'** | `classify` documented "never throws" and threw, on a record written by another version of BONDED | `authorisedParameters` is total; an unreadable intent is a mismatch, not a crash |
+| **H2'** | The seen-set was populated before classification, so a failure suppressed an order permanently; `observeAll` had no per-order isolation | Classify first; isolate each order |
+| **M1'** | A quote-denominated market order bound only symbol, side and type | `cummulativeQuoteQty` carried and compared; overspend is a mismatch |
+| **M2'** | Commission not in the quote asset was treated as base-asset commission, subtracting BNB from an ETH quantity | Three-way against the symbol's own assets; a third asset is reported, not folded in |
+
+### Measured, then left alone
+
+Two performance items from the audit were **withdrawn on measurement** rather than fixed:
+
+- `verifyChain` re-canonicalises every record at boot, which looked like a growing cost.
+  Measured: **229 ms for 20,000 records**. A checkpoint would add complexity and a new
+  thing to trust in order to save a quarter of a second at startup. Not worth it.
+- The per-refresh copy of the trade window looked like it wanted a ring buffer. At any
+  plausible trade volume inside a seven-day window the copy is negligible.
+
+Appending is ~430 µs per record, dominated by `fsync`. That is the durability cost and it
+is the right trade; it is also why the order path has a sub-millisecond floor from the log
+rather than a free one.
+
+The general lesson, recorded because it has now cost twice: **a fix verified by reading
+the control flow is not verified.** C1 shipped because the reasoning was sound and the
+code was never run. Both audits ended with a defect found by execution that reading had
+missed.
+
 ## 4. Dead ends — do not re-litigate
 
 | Idea | Why it was dropped |
