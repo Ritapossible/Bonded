@@ -69,6 +69,7 @@ const FINDING: Finding = {
     status: "FILLED",
     price: decimalUnsafe("0"),
     origQty: decimalUnsafe("5"),
+    cummulativeQuoteQty: decimalUnsafe("0"),
     executedQty: decimalUnsafe("5"),
     observedAtMs: NOW,
     source: "stream",

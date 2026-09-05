@@ -71,3 +71,41 @@ export function describeCoverage(coverage: AuditCoverage, allowPartial: boolean)
       return "no source is delivering";
   }
 }
+
+export interface StartupCoverage {
+  readonly coverage: AuditCoverage;
+  /** Whether trading may begin. */
+  readonly adequate: boolean;
+  /** One line for the boot banner. */
+  readonly detail: string;
+  /** Sources still not delivering when the wait gave up. */
+  readonly waitingFor: readonly string[];
+}
+
+/**
+ * Decide what coverage exists once every source has had a chance to connect.
+ *
+ * This lives here rather than in `cli.ts` because the first version of it lived in
+ * `cli.ts` and was wrong: it sampled coverage the instant `start()` returned, before
+ * any websocket handshake could complete, so the stream read as dead every time and
+ * BONDED refused to boot on a correct configuration. `cli.ts` has no tests; this does.
+ * The rule and the shell are separated so the rule can be exercised.
+ */
+export async function resolveStartupCoverage(options: {
+  readonly sources: readonly OrderSource[];
+  readonly allowPartialCoverage: boolean;
+  readonly connectTimeoutMs: number;
+}): Promise<StartupCoverage> {
+  const { sources, allowPartialCoverage, connectTimeoutMs } = options;
+
+  // In parallel: one slow source must not consume another's budget.
+  await Promise.all(sources.map((source) => source.waitUntilHealthy(connectTimeoutMs)));
+
+  const coverage = currentCoverage(sources);
+  return {
+    coverage,
+    adequate: isAuditPathAdequate({ sources, allowPartialCoverage }),
+    detail: describeCoverage(coverage, allowPartialCoverage),
+    waitingFor: sources.filter((source) => !source.healthy).map((source) => source.name),
+  };
+}

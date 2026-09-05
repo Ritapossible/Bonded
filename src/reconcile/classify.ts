@@ -22,7 +22,7 @@
  */
 
 import { verifyClientOrderId } from "../audit/client-order-id.js";
-import { compare, type DecimalString } from "../core/money.js";
+import { compare, greaterThan, type DecimalString } from "../core/money.js";
 import { authorisedParameters, type Authorisation } from "./authorisation-index.js";
 import type { ObservedOrder } from "./observed-order.js";
 
@@ -109,6 +109,12 @@ function parameterMismatches(order: ObservedOrder, authorisation: Authorisation)
   const expected = authorisedParameters(authorisation.intent);
   const mismatches: string[] = [];
 
+  if (expected.unrecognisedIntent === true) {
+    // A record written by a different version of BONDED. This build cannot say what was
+    // authorised, so it does not claim the order matches it.
+    return ["intent: the authorising record uses a shape this version does not recognise"];
+  }
+
   if (order.symbol !== expected.symbol) {
     mismatches.push(`symbol: authorised ${expected.symbol}, executed ${order.symbol}`);
   }
@@ -127,6 +133,18 @@ function parameterMismatches(order: ObservedOrder, authorisation: Authorisation)
     !equal(order.price, expected.price)
   ) {
     mismatches.push(`price: authorised ${expected.price}, executed ${order.price}`);
+  }
+  // A quote-denominated market order has no base quantity to check, so without this the
+  // only things bound were symbol, side and type: an authorisation to spend 100 USDT
+  // matched an order that spent 100,000. Binance may spend slightly less than asked when
+  // it cannot buy a whole lot, so overspend is the mismatch — underspend is normal.
+  if (
+    expected.quoteOrderQty !== undefined &&
+    greaterThan(order.cummulativeQuoteQty, expected.quoteOrderQty)
+  ) {
+    mismatches.push(
+      `quoteOrderQty: authorised ${expected.quoteOrderQty}, executed ${order.cummulativeQuoteQty}`,
+    );
   }
   return mismatches;
 }

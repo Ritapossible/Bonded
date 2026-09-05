@@ -143,6 +143,18 @@ export class Reconciler {
   observe(order: ObservedOrder): Finding | undefined {
     const key = observationKey(order);
     if (this.#seen.has(key)) return undefined;
+
+    // Classify *before* marking the order seen. Marking first meant that anything
+    // going wrong during classification suppressed that order permanently: the poller
+    // would re-deliver it, this method would return early, and a bypass would sit
+    // unreported for the life of the process.
+    const finding = classify({
+      order,
+      hmacSecret: this.#hmacSecret,
+      mandateHash: this.#mandateHash,
+      authorisation: this.#index.lookup(order.clientOrderId),
+    });
+
     this.#seen.add(key);
     if (this.#seen.size > this.#seenCapacity) {
       // Sets iterate in insertion order, so the first key is the oldest.
@@ -152,13 +164,6 @@ export class Reconciler {
 
     this.#observed++;
     this.#lastObservedAtMs = this.#clock.now();
-
-    const finding = classify({
-      order,
-      hmacSecret: this.#hmacSecret,
-      mandateHash: this.#mandateHash,
-      authorisation: this.#index.lookup(order.clientOrderId),
-    });
 
     if (!isFinding(finding.outcome)) {
       this.#authorised++;
@@ -203,8 +208,19 @@ export class Reconciler {
   observeAll(orders: readonly ObservedOrder[]): Finding[] {
     const results: Finding[] = [];
     for (const order of orders) {
-      const finding = this.observe(order);
-      if (finding !== undefined) results.push(finding);
+      // Isolated per order. This runs inside a poll timer and a websocket handler,
+      // where an escaping exception becomes an unhandled rejection and takes the
+      // process down — losing the rest of the batch, which is where the bypass this
+      // component exists to find may well be.
+      try {
+        const finding = this.observe(order);
+        if (finding !== undefined) results.push(finding);
+      } catch (cause: unknown) {
+        this.#logger.error(
+          { cause, symbol: order.symbol, orderId: order.orderId },
+          "could not classify an observed order; continuing with the rest of the batch",
+        );
+      }
     }
     return results;
   }

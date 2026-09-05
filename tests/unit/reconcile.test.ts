@@ -19,7 +19,7 @@ import type { DecisionRecord } from "../../src/domain/decision.js";
 import type { OrderIntent } from "../../src/domain/intent.js";
 import { createSilentLogger } from "../../src/observability/logger.js";
 import { AuthorisationIndex } from "../../src/reconcile/authorisation-index.js";
-import { ReconciliationOutcome, classify } from "../../src/reconcile/classify.js";
+import { ReconciliationOutcome, classify, type Finding } from "../../src/reconcile/classify.js";
 import {
   parseAllOrders,
   parseExecutionReport,
@@ -61,6 +61,7 @@ function observed(overrides: Partial<ObservedOrder> = {}): ObservedOrder {
     status: "FILLED",
     price: decimalUnsafe("2000"),
     origQty: decimalUnsafe("0.1"),
+    cummulativeQuoteQty: decimalUnsafe("0"),
     executedQty: decimalUnsafe("0.1"),
     observedAtMs: NOW,
     source: "stream",
@@ -340,5 +341,157 @@ describe("wire format parsing", () => {
 
   it("rejects a non-array allOrders payload", () => {
     expect(parseAllOrders({ code: -1121 }).ok).toBe(false);
+  });
+});
+
+describe("classification robustness", () => {
+  /**
+   * The audit's H1'. `classify` documents "never throws", and it did: the switch in
+   * `authorisedParameters` was exhaustive over today's union but is also fed records
+   * replayed from a log written by another version, where an unknown kind fell through
+   * and returned undefined for the caller to dereference.
+   */
+  it("does not throw on an authorisation whose intent it cannot read", () => {
+    const record = authorisedRecord(9);
+    const alien = {
+      ...record,
+      intent: { kind: "STOP_LIMIT", symbol: "ETHUSDT", side: "BUY" },
+    } as unknown as DecisionRecord;
+
+    const index = new AuthorisationIndex();
+    index.record(alien);
+
+    const order = observed({ clientOrderId: alien.clientOrderId ?? "" });
+    let finding: Finding | undefined;
+    expect(() => {
+      finding = classify({
+        order,
+        hmacSecret: SECRET,
+        mandateHash: MANDATE,
+        authorisation: index.lookup(order.clientOrderId),
+      });
+    }).not.toThrow();
+    // And it does not wave the order through either.
+    expect(finding?.outcome).toBe(ReconciliationOutcome.MISMATCHED);
+  });
+
+  it("reconciles the size of a quote-denominated market order", () => {
+    // The audit's M1'. Only symbol, side and type were bound, so an authorisation to
+    // spend 100 USDT matched an order that spent 100,000 and read as AUTHORISED.
+    const intent: OrderIntent = {
+      kind: "MARKET_QUOTE",
+      symbol: "ETHUSDT",
+      side: "BUY",
+      quoteOrderQty: decimalUnsafe("100"),
+    };
+    const record = authorisedRecord(11, intent);
+    const index = new AuthorisationIndex();
+    index.record(record);
+
+    const overspent = observed({
+      clientOrderId: record.clientOrderId ?? "",
+      type: "MARKET",
+      cummulativeQuoteQty: decimalUnsafe("100000"),
+    });
+    const finding = classify({
+      order: overspent,
+      hmacSecret: SECRET,
+      mandateHash: MANDATE,
+      authorisation: index.lookup(overspent.clientOrderId),
+    });
+    expect(finding.outcome).toBe(ReconciliationOutcome.MISMATCHED);
+    expect(finding.explanation).toContain("quoteOrderQty");
+  });
+
+  it("accepts a quote-denominated order that spent no more than authorised", () => {
+    // Binance may spend slightly less when it cannot buy a whole lot. Underspend is
+    // normal; only overspend is a mismatch.
+    const intent: OrderIntent = {
+      kind: "MARKET_QUOTE",
+      symbol: "ETHUSDT",
+      side: "BUY",
+      quoteOrderQty: decimalUnsafe("100"),
+    };
+    const record = authorisedRecord(12, intent);
+    const index = new AuthorisationIndex();
+    index.record(record);
+
+    const order = observed({
+      clientOrderId: record.clientOrderId ?? "",
+      type: "MARKET",
+      cummulativeQuoteQty: decimalUnsafe("99.87"),
+    });
+    const finding = classify({
+      order,
+      hmacSecret: SECRET,
+      mandateHash: MANDATE,
+      authorisation: index.lookup(order.clientOrderId),
+    });
+    expect(finding.outcome).toBe(ReconciliationOutcome.AUTHORISED);
+  });
+});
+
+describe("batch isolation", () => {
+  // The audit's H2'. `#seen` was populated before classification, so a failure marked
+  // the order seen and it was never re-examined; and `observeAll` had no per-order
+  // isolation, so one bad order aborted the batch — inside a poll timer, where the
+  // escaping rejection takes the process down.
+  it("keeps classifying after one order fails", () => {
+    const index = new AuthorisationIndex();
+    const record = authorisedRecord(21);
+    index.record(record);
+
+    const findings: Finding[] = [];
+    const reconciler = new Reconciler({
+      index,
+      hmacSecret: SECRET,
+      mandateHash: MANDATE,
+      clock: new FixedClock(NOW),
+      logger: createSilentLogger(),
+      onFinding: (finding) => findings.push(finding),
+    });
+
+    // A getter that throws stands in for any failure inside classification.
+    const poison = observed({ orderId: 1 });
+    Object.defineProperty(poison, "clientOrderId", {
+      get() {
+        throw new Error("boom");
+      },
+    });
+    const bypass = observed({ orderId: 2, clientOrderId: "", source: "poll" });
+
+    const results = reconciler.observeAll([poison, bypass]);
+
+    // The bypass after the poison order is still found.
+    expect(results).toHaveLength(1);
+    expect(results[0]?.outcome).toBe(ReconciliationOutcome.FOREIGN);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("re-examines an order whose first classification failed", () => {
+    const index = new AuthorisationIndex();
+    const reconciler = new Reconciler({
+      index,
+      hmacSecret: SECRET,
+      mandateHash: MANDATE,
+      clock: new FixedClock(NOW),
+      logger: createSilentLogger(),
+      onFinding: () => undefined,
+    });
+
+    let failures = 1;
+    const flaky = observed({ orderId: 3, clientOrderId: "", source: "poll" });
+    const key = { ...flaky };
+    Object.defineProperty(flaky, "clientOrderId", {
+      get() {
+        if (failures-- > 0) throw new Error("transient");
+        return "";
+      },
+    });
+
+    expect(reconciler.observeAll([flaky])).toHaveLength(0);
+    // The poller re-delivers it. Before the fix this returned nothing forever, because
+    // the order had already been added to the seen set.
+    expect(reconciler.observeAll([key])).toHaveLength(1);
   });
 });

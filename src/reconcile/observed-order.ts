@@ -31,6 +31,14 @@ export interface ObservedOrder {
   readonly price: DecimalString;
   readonly origQty: DecimalString;
   readonly executedQty: DecimalString;
+  /**
+   * Quote-asset value actually transacted.
+   *
+   * Carried because a quote-denominated market order has no base quantity to compare:
+   * without this, an authorisation to spend 100 USDT matched an order that spent
+   * 100,000 and was classified AUTHORISED — the one outcome that does not burn the bond.
+   */
+  readonly cummulativeQuoteQty: DecimalString;
   /** Exchange-side event time, in epoch milliseconds. */
   readonly observedAtMs: number;
   /** Which account this observation came from — useful in findings and logs. */
@@ -60,6 +68,8 @@ const ExecutionReportSchema = z.object({
   z: numericString,
   /** Present when this report is the result of a cancel/replace; the original id. */
   C: z.string().optional(),
+  /** Cumulative quote-asset value transacted. */
+  Z: numericString.optional(),
 });
 
 const AllOrdersEntrySchema = z.object({
@@ -72,6 +82,7 @@ const AllOrdersEntrySchema = z.object({
   price: numericString,
   origQty: numericString,
   executedQty: numericString,
+  cummulativeQuoteQty: numericString.optional(),
   time: z.number().optional(),
   updateTime: z.number().optional(),
 });
@@ -107,6 +118,9 @@ export function parseExecutionReport(raw: unknown): Result<ObservedOrder, Bonded
     price: event.p as DecimalString,
     origQty: event.q as DecimalString,
     executedQty: event.z as DecimalString,
+    // Absent on some event shapes; an unknown amount is zero, and the comparison
+    // treats a zero it cannot vouch for as a mismatch rather than a match.
+    cummulativeQuoteQty: (event.Z ?? "0") as DecimalString,
     observedAtMs: event.E,
     source: "stream",
   });
@@ -134,6 +148,7 @@ export function parseAllOrders(raw: unknown): Result<ObservedOrder[], BondedErro
       price: order.price as DecimalString,
       origQty: order.origQty as DecimalString,
       executedQty: order.executedQty as DecimalString,
+      cummulativeQuoteQty: (order.cummulativeQuoteQty ?? "0") as DecimalString,
       observedAtMs: order.updateTime ?? order.time ?? 0,
       source: "poll",
     });

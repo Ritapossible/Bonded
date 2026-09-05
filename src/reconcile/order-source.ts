@@ -24,6 +24,13 @@ import { describeUnknownError, type BondedError } from "../core/errors.js";
 import type { Logger } from "../observability/logger.js";
 import { parseAllOrders, parseExecutionReport, type ObservedOrder } from "./observed-order.js";
 
+/** How often `waitUntilHealthy` re-checks. */
+const HEALTH_POLL_MS = 50;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export type OrderHandler = (orders: readonly ObservedOrder[]) => void;
 
 /**
@@ -49,6 +56,17 @@ export interface OrderSource {
   readonly coverage: OrderSourceCoverage;
   start(onOrders: OrderHandler): Promise<void>;
   stop(): Promise<void>;
+  /**
+   * Resolve once this source is delivering, or when `timeoutMs` elapses.
+   *
+   * `start()` returning does not mean a source is live: opening a websocket is a
+   * handshake that completes on a later turn of the event loop. Judging coverage the
+   * instant `start()` returned reported every stream as dead and refused to boot. The
+   * caller needs a way to wait for the answer instead of sampling too early.
+   *
+   * Returns the health at the moment it gives up waiting, so the caller decides.
+   */
+  waitUntilHealthy(timeoutMs: number): Promise<boolean>;
   /** When this source last successfully heard from the exchange. */
   readonly lastHealthyAtMs: number | undefined;
   readonly healthy: boolean;
@@ -102,6 +120,14 @@ export class PollingOrderSource implements OrderSource {
     if (this.#lastHealthyAtMs === undefined) return false;
     // Two missed intervals is a stall, not jitter.
     return this.#clock.now() - this.#lastHealthyAtMs <= this.#intervalMs * 2;
+  }
+
+  /**
+   * Already settled: `start()` awaits the first pass, so this source's health is known
+   * by the time anyone can ask.
+   */
+  waitUntilHealthy(_timeoutMs: number): Promise<boolean> {
+    return Promise.resolve(this.healthy);
   }
 
   async start(onOrders: OrderHandler): Promise<void> {
@@ -237,6 +263,22 @@ export class UserDataStreamSource implements OrderSource {
 
   get healthy(): boolean {
     return this.#socket?.readyState === 1; /* OPEN */
+  }
+
+  /**
+   * Wait for the socket to finish its handshake.
+   *
+   * Polled rather than event-driven on purpose: the socket is replaced on every
+   * reconnect, so a listener attached to the one that existed when this was called
+   * would be watching an object nobody uses any more. A short poll is correct across
+   * a reconnect and costs nothing at this timescale.
+   */
+  async waitUntilHealthy(timeoutMs: number): Promise<boolean> {
+    const deadline = this.#clock.now() + timeoutMs;
+    while (!this.healthy && !this.#stopped && this.#clock.now() < deadline) {
+      await delay(HEALTH_POLL_MS);
+    }
+    return this.healthy;
   }
 
   async start(onOrders: OrderHandler): Promise<void> {

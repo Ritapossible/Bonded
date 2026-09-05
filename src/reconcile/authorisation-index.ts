@@ -126,10 +126,20 @@ export class AuthorisationIndex {
 export interface AuthorisedParameters {
   readonly symbol: string;
   readonly side: "BUY" | "SELL";
-  readonly type: "LIMIT" | "MARKET";
+  readonly type: string;
   /** Absent for a quote-denominated market order, which carries no base quantity. */
   readonly quantity?: DecimalString;
   readonly price?: DecimalString;
+  /** Quote-asset amount authorised. Present only for a quote-denominated market order. */
+  readonly quoteOrderQty?: DecimalString;
+  /**
+   * Set when the authorisation's intent could not be understood at all.
+   *
+   * Reached only by a record written by a different version of BONDED. The comparison
+   * treats it as a mismatch: an authorisation this build cannot read is not one it can
+   * vouch for, and saying so beats either throwing or waving the order through.
+   */
+  readonly unrecognisedIntent?: boolean;
 }
 
 export function authorisedParameters(intent: OrderIntent): AuthorisedParameters {
@@ -150,6 +160,18 @@ export function authorisedParameters(intent: OrderIntent): AuthorisedParameters 
         quantity: intent.quantity,
       };
     case "MARKET_QUOTE":
-      return { symbol: intent.symbol, side: intent.side, type: "MARKET" };
+      return {
+        symbol: intent.symbol,
+        side: intent.side,
+        type: "MARKET",
+        quoteOrderQty: intent.quoteOrderQty,
+      };
+    default:
+      // Not decoration. The switch is exhaustive over today's union, but this function
+      // is also fed records replayed from a log written by some other version of
+      // BONDED. Without this the fall-through returned `undefined`, and the caller
+      // dereferenced it — turning a classifier that documents "never throws" into one
+      // that throws, on the path where a bypass would have been reported.
+      return { symbol: "", side: "BUY", type: "UNKNOWN", unrecognisedIntent: true };
   }
 }

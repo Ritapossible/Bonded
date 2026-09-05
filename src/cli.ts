@@ -13,7 +13,7 @@
  */
 
 import { checkQuoteAssets } from "./domain/quote-asset.js";
-import { currentCoverage, describeCoverage, isAuditPathAdequate } from "./reconcile/audit-path.js";
+import { isAuditPathAdequate, resolveStartupCoverage } from "./reconcile/audit-path.js";
 import { readFile } from "node:fs/promises";
 import { DecisionLog } from "./audit/decision-log.js";
 import { BinanceClient } from "./binance/client.js";
@@ -63,6 +63,15 @@ async function loadMandate(path: string): Promise<Mandate | undefined> {
   }
   return compiled.value;
 }
+
+/**
+ * How long to wait for the user data stream before deciding what coverage we have.
+ *
+ * Long enough for a handshake on a slow link, short enough that a genuinely dead
+ * stream does not hold startup open. Exceeding it is not fatal by itself — it hands
+ * the decision to the coverage rule below.
+ */
+const STREAM_CONNECT_TIMEOUT_MS = 10_000;
 
 async function main(): Promise<number> {
   const config = loadConfig();
@@ -230,13 +239,27 @@ async function main(): Promise<number> {
     reconciler.observeAll(orders);
   });
 
-  const coverage = currentCoverage(sources);
-  const coverageStatus =
-    coverage === "full" ? "PASS" : config.value.allowPartialAudit ? "WARN" : "FAIL";
-  emit(
-    `  [${coverageStatus}] auditCoverage       ${describeCoverage(coverage, config.value.allowPartialAudit)}`,
-  );
-  if (coverageStatus === "FAIL") {
+  // A websocket handshake completes on a later turn of the event loop, so sampling
+  // coverage the instant `start()` returned reported the stream dead every time and
+  // refused to boot on a correct configuration. Wait for the answer.
+  const startup = await resolveStartupCoverage({
+    sources,
+    allowPartialCoverage: config.value.allowPartialAudit,
+    connectTimeoutMs: STREAM_CONNECT_TIMEOUT_MS,
+  });
+  if (startup.waitingFor.length > 0) {
+    emit(
+      `  [WARN] userDataStream      ${startup.waitingFor.join(", ")} not delivering after ${String(STREAM_CONNECT_TIMEOUT_MS)} ms; still retrying`,
+    );
+  }
+
+  const coverageStatus = startup.adequate
+    ? startup.coverage === "full"
+      ? "PASS"
+      : "WARN"
+    : "FAIL";
+  emit(`  [${coverageStatus}] auditCoverage       ${startup.detail}`);
+  if (!startup.adequate) {
     emit("         The user data stream is the only account-wide source. Without it an order on a");
     emit("         symbol outside the mandate cannot be seen. Set BONDED_ALLOW_PARTIAL_AUDIT=1 to");
     emit("         accept that and trade anyway.");
