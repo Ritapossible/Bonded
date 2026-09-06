@@ -17,6 +17,19 @@ cp .env.example .env          # fill in the two testnet keys
 openssl rand -hex 32          # -> BONDED_HMAC_SECRET in .env
 ```
 
+Add two more lines to `.env`. Binance removed the listen-key endpoints in February 2026,
+so the account-wide stream answers 410 and BONDED refuses to start until it is told that
+symbol-scoped polling is acceptable:
+
+```
+BONDED_ALLOW_PARTIAL_AUDIT=1
+BONDED_POLL_INTERVAL_MS=3000
+```
+
+Three seconds keeps the bypass detection inside one unbroken shot. The bypass targets a
+mandate symbol, so the poller sees it; an order on a symbol *outside* the mandate would
+not be seen at all, which is exactly what the banner's WARN is telling you.
+
 Testnet keys come from <https://testnet.binance.vision> (log in with GitHub). The account is
 funded automatically; there is nothing to deposit and no money at risk.
 
@@ -106,7 +119,7 @@ Then go back to the agent and ask for anything at all. It is refused with `scope
 | --- | --- | --- |
 | `[FAIL] clockSkew` | Machine clock drifted, or no route to the exchange | Sync the clock; check the testnet is reachable |
 | Bypass order rejected for `LOT_SIZE` | Quantity below the symbol's step size | Raise it: `node scripts/bypass-order.mjs BTCUSDT BUY 0.002` |
-| Console shows nothing after the bypass | User data stream dropped | The polling backstop still catches it, within `BONDED_POLL_INTERVAL_MS` (15s default) |
+| Console shows nothing after the bypass | The stream is gone (410 since Feb 2026), so polling is the only source | Confirm `BONDED_ALLOW_PARTIAL_AUDIT=1` is set and lower `BONDED_POLL_INTERVAL_MS`. Detection lands within one poll interval |
 | Everything is refused before you start | The bond is already burned from a previous take | Reset between takes (below) |
 | The bond burned while you were setting up | `npm run redteam` was run with this instance live | Expected: the red team places a real order on the same account. Stop the recording instance before running it, then reset |
 

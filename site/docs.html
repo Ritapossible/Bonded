@@ -981,6 +981,26 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
           <code>BONDED_WATCH_SYMBOLS</code> widens the poller beyond the mandate's own symbols.
         </p>
 
+        <div class="note note--warn">
+          <p>
+            <strong>As of 2026-09-06 this is not hypothetical.</strong> Binance removed the
+            listen-key REST endpoints in February 2026:
+            <code>POST /api/v3/userDataStream</code> answers <strong>410 Gone</strong> on Spot
+            Testnet, verified on a real machine. The account-wide source is unavailable, so BONDED
+            refuses to start unless <code>BONDED_ALLOW_PARTIAL_AUDIT=1</code> says symbol-scoped
+            coverage is acceptable - the guard behaving as designed rather than trading with less
+            observation than it claims. A removed endpoint is recognised as permanent: reported once
+            on the banner, never retried.
+          </p>
+          <p>
+            The replacement is <code>POST /sapi/v1/userListenToken</code> plus
+            <code>userDataStream.subscribe.listenToken</code> over the WebSocket API, and it is not
+            implemented here. Until it is, run with <code>BONDED_ALLOW_PARTIAL_AUDIT=1</code> and a
+            short <code>BONDED_POLL_INTERVAL_MS</code> (3000 works): detection then comes from
+            polling the mandate's symbols rather than from the stream.
+          </p>
+        </div>
+
         <h3>Aggregate limits bind against a snapshot, not the exchange's clock</h3>
         <p>
           The order path is serialised, and orders placed since the current account observation
@@ -1008,7 +1028,7 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
 
         <h2 id="development">Development</h2>
         <pre><code>npm run check      # typecheck, lint, format, tests
-npm test           # 301 tests
+npm test           # 306 tests
 npm run build      # compile to dist/</code></pre>
         <p>
           The gate is a pure function, so it is tested exhaustively without mocks. The Binance

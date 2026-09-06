@@ -24,6 +24,12 @@ import { describeUnknownError, type BondedError } from "../core/errors.js";
 import type { Logger } from "../observability/logger.js";
 import { parseAllOrders, parseExecutionReport, type ObservedOrder } from "./observed-order.js";
 
+/** The HTTP status an exchange error carries, when it carries one. */
+function statusOf(error: BondedError): number | undefined {
+  const status = error.details["status"];
+  return typeof status === "number" ? status : undefined;
+}
+
 /** How often `waitUntilHealthy` re-checks. */
 const HEALTH_POLL_MS = 50;
 
@@ -54,6 +60,13 @@ export type OrderSourceCoverage =
 export interface OrderSource {
   readonly name: string;
   readonly coverage: OrderSourceCoverage;
+  /**
+   * Why this source can never become healthy, when that is known.
+   *
+   * Undefined means "no reason to think so", which covers both a healthy source and
+   * one still trying. Only a source that knows recovery is impossible sets it.
+   */
+  readonly unavailableReason?: string | undefined;
   start(onOrders: OrderHandler): Promise<void>;
   stop(): Promise<void>;
   /**
@@ -216,13 +229,24 @@ export interface UserDataStreamSourceOptions {
 /**
  * Real-time order events over Binance's user data stream.
  *
- * Uses the **listen-key** flow rather than the WebSocket API's
- * `userDataStream.subscribe`. That newer method requires an authenticated session via
- * `session.logon`, which requires Ed25519 keys; the listen-key flow works with the
- * HMAC keys Spot Testnet issues. See MEMORY.md — this is a deliberate choice, not an
- * oversight.
+ * Uses the **listen-key** flow. This was chosen because the WebSocket API's
+ * `userDataStream.subscribe` needs an authenticated session via `session.logon` and
+ * therefore Ed25519 keys, while Spot Testnet issues HMAC keys.
  *
- * A listen key expires after 60 minutes and must be kept alive. A lapsed key stops
+ * **That choice has since been overtaken by Binance.** Verified against Spot Testnet on
+ * 2026-09-06: `POST /api/v3/userDataStream` answers **410 Gone**. Binance removed the
+ * listen-key REST endpoints in February 2026, replacing them with
+ * `POST /sapi/v1/userListenToken` plus `userDataStream.subscribe.listenToken`. So this
+ * source no longer connects anywhere, and the polling backstop is the only order source
+ * until the token flow is implemented.
+ *
+ * It is kept rather than deleted for two reasons: the code is the shape the replacement
+ * needs (open a credential, hold a socket, keep it alive, reconnect), and deleting it
+ * would remove the thing that *reports* the loss. A removed endpoint is now recognised
+ * as permanent — reported once, never retried — so the boot banner says what actually
+ * happened instead of "still retrying" forever.
+ *
+ * A listen key expired after 60 minutes and had to be kept alive. A lapsed key stopped
  * delivering events *without an error*, which would blind the audit path silently — so
  * a keepalive failure marks the source unhealthy rather than being swallowed.
  */
@@ -244,6 +268,7 @@ export class UserDataStreamSource implements OrderSource {
   #reconnectTimer: NodeJS.Timeout | undefined;
   #onOrders: OrderHandler | undefined;
   #stopped = false;
+  #unavailableReason: string | undefined;
   #lastHealthyAtMs: number | undefined;
 
   constructor(options: UserDataStreamSourceOptions) {
@@ -261,6 +286,16 @@ export class UserDataStreamSource implements OrderSource {
     return this.#lastHealthyAtMs;
   }
 
+  /**
+   * Why this source will never become healthy, when that is already known.
+   *
+   * Separates "not connected yet" from "cannot connect, ever". A caller that cannot
+   * tell those apart spends its whole timeout waiting for something not coming.
+   */
+  get unavailableReason(): string | undefined {
+    return this.#unavailableReason;
+  }
+
   get healthy(): boolean {
     return this.#socket?.readyState === 1; /* OPEN */
   }
@@ -275,7 +310,14 @@ export class UserDataStreamSource implements OrderSource {
    */
   async waitUntilHealthy(timeoutMs: number): Promise<boolean> {
     const deadline = this.#clock.now() + timeoutMs;
-    while (!this.healthy && !this.#stopped && this.#clock.now() < deadline) {
+    while (
+      !this.healthy &&
+      !this.#stopped &&
+      // No point spending the caller's budget on a socket a removed endpoint means
+      // will never open.
+      this.#unavailableReason === undefined &&
+      this.#clock.now() < deadline
+    ) {
       await delay(HEALTH_POLL_MS);
     }
     return this.healthy;
@@ -292,6 +334,22 @@ export class UserDataStreamSource implements OrderSource {
 
     const listenKey = await this.#client.createListenKey();
     if (!listenKey.ok) {
+      // 410 Gone is not a transient failure, and retrying it every ten seconds forever
+      // is noise that buries the real cause. Binance removed the listen-key REST
+      // endpoints in February 2026, in favour of `POST /sapi/v1/userListenToken` plus
+      // `userDataStream.subscribe.listenToken` over the WebSocket API. Say that once,
+      // name the consequence, and stop: the polling backstop is what covers this, and
+      // the audit-coverage guard decides whether that is enough to trade on.
+      if (statusOf(listenKey.error) === 410) {
+        this.#unavailableReason =
+          "Binance removed POST /api/v3/userDataStream (410 Gone) in February 2026. " +
+          "Real-time execution reports are unavailable; polling is the only order source.";
+        this.#logger.error(
+          { error: listenKey.error.toJSON() },
+          "user data stream endpoint has been removed by Binance; not retrying",
+        );
+        return;
+      }
       this.#logger.error({ error: listenKey.error.toJSON() }, "could not open a user data stream");
       this.#scheduleReconnect();
       return;

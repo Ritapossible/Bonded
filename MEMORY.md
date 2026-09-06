@@ -225,7 +225,7 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 | **Price ignored for market orders** | Binance reports price `0` for them. Comparing it would flag every market order as mismatched |
 | **De-duplicate by exchange order id** | Stream and poll deliberately overlap. Without de-duplication one bypass alerts repeatedly, which is how an alerting channel becomes noise nobody reads |
 | **Index rebuilt from the decision log at startup** | Otherwise every order placed before a restart becomes an apparent bypass |
-| **Listen-key flow, not `userDataStream.subscribe`** | The WebSocket API method needs `session.logon`, which needs **Ed25519** keys. Spot Testnet issues HMAC keys, so the listen-key flow is the one that works. Deliberate, not an oversight |
+| **Listen-key flow, not `userDataStream.subscribe`** | ~~The WebSocket API method needs `session.logon`, which needs **Ed25519** keys.~~ **Overtaken by Binance:** the listen-key REST endpoints were removed in Feb 2026 and answer 410. The reasoning was right when written and is now moot — see open question 7 |
 | **Polling backstop is a hard startup dependency** | No audit path, no trading. The stream is best-effort on top; its absence is stated, never silently tolerated |
 | **A keepalive failure marks the source unhealthy** | An expired listen key stops delivering events *without closing the socket* — silent blindness is the failure mode this guards against |
 | **The engine publishes decisions via a callback** | The reconciler calls back into `revokeScope`; a mutual import would be a cycle. The CLI wires both ends through a holder object |
@@ -318,11 +318,11 @@ missed.
 | --- | --- | --- | --- |
 | 1 | Does `GET /sapi/v1/account/apiRestrictions` exist on Spot Testnet? | Boot guard 2's strength | **Handled** — the guard degrades to `WARN` on testnet and states what it checked instead. Verify on mainnet if that path is ever used |
 | 2 | What is `BINANCE_API_ENV=demo`? | Possibly a better demo surface | Open — undocumented |
-| 3 | Do user data streams work on Spot Testnet? | The reconciler | **Resolved — yes** (§2) |
+| 3 | Do user data streams work on Spot Testnet? | The reconciler | **Superseded by 7.** The listen-key route to them is removed; the `listenToken` route is untried |
 | 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | **Re-decided — both, split by direction.** Direct REST for *writes*, for the original reason: the gate must control the exact query string it signs and stamp `newClientOrderId` per order. That reasoning never applied to *reads*, and deciding it once for the whole client quietly reinstated the sponsor-alignment risk the dead-ends table warns about. `@binance/binance-cli` is now a dependency and backs the reference-price read under `BONDED_PRICE_SOURCE=binance-cli` |
 | 6 | Live testnet round trip | The demo | **Blocked in the cloud sandbox** (geo-block, §2). Must be run locally |
 | 8 | Will the hub accept a skill that is not a Binance-operated service? | Distribution | Open — every current skill is first-party. Worth opening the PR regardless; a rejection costs nothing and the repo link stands on its own |
-| 7 | Does the listen-key flow work on Spot Testnet with HMAC keys? | Real-time detection | **Untested** — geo-blocked here. The polling backstop covers the audit path either way, so a failure degrades the demo from instant to ~15s rather than breaking it. **Verify locally first** |
+| 7 | Does the listen-key flow work on Spot Testnet with HMAC keys? | Real-time detection | **Resolved — NO.** Run on a real machine 2026-09-06: `POST /api/v3/userDataStream` returns **410 Gone**. Binance removed the listen-key REST endpoints in Feb 2026. Replacement is `POST /sapi/v1/userListenToken` + `userDataStream.subscribe.listenToken`, not implemented. Run with `BONDED_ALLOW_PARTIAL_AUDIT=1` and a short `BONDED_POLL_INTERVAL_MS` until it is |
 | 5 | What is already published on Binance Skills Hub's listing UI? | Competitive picture | **Unresolved** — `binance.com/en/skills` could not be loaded through this sandbox's proxy on three attempts. **Check manually** |
 
 ---

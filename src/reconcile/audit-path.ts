@@ -80,6 +80,14 @@ export interface StartupCoverage {
   readonly detail: string;
   /** Sources still not delivering when the wait gave up. */
   readonly waitingFor: readonly string[];
+  /**
+   * Reasons a source has given for being permanently unavailable.
+   *
+   * "Still retrying" and "this endpoint no longer exists" both look like an unhealthy
+   * source from the outside, and an operator told the first when the second is true
+   * will wait for a recovery that cannot happen.
+   */
+  readonly unavailable: readonly string[];
 }
 
 /**
@@ -107,5 +115,8 @@ export async function resolveStartupCoverage(options: {
     adequate: isAuditPathAdequate({ sources, allowPartialCoverage }),
     detail: describeCoverage(coverage, allowPartialCoverage),
     waitingFor: sources.filter((source) => !source.healthy).map((source) => source.name),
+    unavailable: sources
+      .map((source) => source.unavailableReason)
+      .filter((reason): reason is string => reason !== undefined),
   };
 }

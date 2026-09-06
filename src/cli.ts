@@ -285,7 +285,10 @@ async function main(): Promise<number> {
     allowPartialCoverage: config.value.allowPartialAudit,
     connectTimeoutMs: STREAM_CONNECT_TIMEOUT_MS,
   });
-  if (startup.waitingFor.length > 0) {
+  for (const reason of startup.unavailable) {
+    emit(`  [WARN] userDataStream      ${reason}`);
+  }
+  if (startup.unavailable.length === 0 && startup.waitingFor.length > 0) {
     emit(
       `  [WARN] userDataStream      ${startup.waitingFor.join(", ")} not delivering after ${String(STREAM_CONNECT_TIMEOUT_MS)} ms; still retrying`,
     );

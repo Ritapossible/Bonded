@@ -151,6 +151,26 @@ account-wide source, trading stops. `BONDED_ALLOW_PARTIAL_AUDIT=1` accepts symbo
 coverage and keeps trading, and the boot banner says which of the two is in force.
 `BONDED_WATCH_SYMBOLS` widens the poller beyond the mandate's own symbols.
 
+**As of 2026-09-06 that is not a hypothetical.** Binance removed the listen-key REST
+endpoints in February 2026: `POST /api/v3/userDataStream` now answers **410 Gone** on
+Spot Testnet, verified on a real machine. The account-wide source is therefore
+unavailable, and BONDED refuses to start unless `BONDED_ALLOW_PARTIAL_AUDIT=1` says
+symbol-scoped coverage is acceptable — which is the guard behaving exactly as designed,
+refusing to trade with less observation than it claims.
+
+The replacement is `POST /sapi/v1/userListenToken` plus
+`userDataStream.subscribe.listenToken` over the WebSocket API. It is not implemented
+here. Until it is, run with:
+
+```
+BONDED_ALLOW_PARTIAL_AUDIT=1
+BONDED_POLL_INTERVAL_MS=3000
+```
+
+Detection then comes from polling the mandate's symbols every three seconds instead of
+from the stream — slower, and blind to symbols outside the mandate, which is precisely
+what the WARN on the banner says.
+
 A mid-session stream loss that still leaves the poller healthy degrades detection from
 near-instant to one polling interval, for the symbols the poller covers.
 
@@ -171,12 +191,15 @@ Positions that stay open are not counted at all — that is what "realised" mean
 
 ### What has not been exercised against a live exchange
 
-Development ran in an environment Binance geo-blocks, so **the live testnet round trip has
-not been run** — signing, order placement and the user data stream are covered by tests
-against a stubbed exchange, not by a real one. The listen-key flow in particular is
-unverified: it is used deliberately, because `userDataStream.subscribe` requires
-`session.logon` and therefore Ed25519 keys that Spot Testnet does not issue, but whether it
-behaves as documented is an open question recorded in [MEMORY.md](./MEMORY.md).
+Development ran in an environment Binance geo-blocks, so signing and order placement are
+covered by tests against a stubbed exchange rather than a real one.
+
+The boot path **has** now been run against live Spot Testnet, and two things came back
+from it. The guards pass — environment, mandate, clock skew, symbol grounding against
+live `exchangeInfo`, audit path — and the clock-skew guard caught a real 113-second drift
+on the machine it ran on, before anything was signed. And the listen-key flow is **gone**:
+`POST /api/v3/userDataStream` answers 410, as described above. What remains unverified is
+an order actually reaching the matching engine and coming back through reconciliation.
 
 ## Status
 
@@ -197,7 +220,7 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Owner console — one screen, live over SSE | done |
 | Public API entry point, CI, process-level failure handling | done |
 
-301 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+306 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -445,7 +468,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 301 tests, ~2s
+npm test           # 306 tests, ~2s
 ```
 
 ## Licence

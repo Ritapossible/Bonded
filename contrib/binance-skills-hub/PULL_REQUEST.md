@@ -10,7 +10,7 @@ stamped client order id, or `DENIED` naming the exact mandate clause it breached
 The skill does not decide what to trade. It produces no signals, strategies or
 recommendations; it enforces limits an owner wrote and reports what it refused and why.
 
-Source: <https://github.com/Ritapossible/Bonded> — MIT, 301 tests, typecheck and lint clean.
+Source: <https://github.com/Ritapossible/Bonded> — MIT, 306 tests, typecheck and lint clean.
 
 # APIs Used
 
@@ -33,10 +33,13 @@ GET /sapi/v1/account/apiRestrictions | Boot guard: verifies the API key cannot w
 
 WebSocket: `wss://stream.testnet.binance.vision/ws/<listenKey>` for `executionReport` events.
 
-> The listen-key flow is used deliberately rather than the WebSocket API's
-> `userDataStream.subscribe`, which requires an authenticated session via `session.logon`
-> and therefore Ed25519 keys. Spot Testnet issues HMAC keys, so the listen-key flow is the
-> one that works there.
+> **Known limitation, verified on Spot Testnet 2026-09-06.** Binance removed the
+> listen-key REST endpoints in February 2026 and they now answer `410 Gone`, so the
+> account-wide stream does not connect. The skill treats that as a permanent failure,
+> reports it once on the boot banner rather than retrying, and refuses to start unless
+> `BONDED_ALLOW_PARTIAL_AUDIT=1` accepts symbol-scoped polling instead. Migrating to
+> `POST /sapi/v1/userListenToken` + `userDataStream.subscribe.listenToken` is the
+> outstanding work; it is listed here rather than left for a reviewer to discover.
 
 # Binaries Used
 
