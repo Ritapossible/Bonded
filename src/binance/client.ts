@@ -369,7 +369,21 @@ export class BinanceClient {
   /** All orders for a symbol, including ones BONDED never authorised. The reconciler's backstop. */
   async allOrders(
     symbol: string,
-    options: { readonly startTime?: number; readonly limit?: number } = {},
+    options: {
+      readonly startTime?: number;
+      readonly limit?: number;
+      /**
+       * Whether to retry inside the call.
+       *
+       * The polling backstop passes `false`, because it is already a retry loop: it
+       * runs again every `BONDED_POLL_INTERVAL_MS`. Retrying four times at a ten-second
+       * timeout inside a loop that repeats in three seconds makes one pass take up to
+       * 42 seconds per symbol, and the source is judged unhealthy long before that pass
+       * can finish — reporting "no order source is delivering" about a source that is
+       * mid-delivery.
+       */
+      readonly retry?: boolean;
+    } = {},
   ): Promise<Result<unknown[], BondedError>> {
     return this.#request({
       method: "GET",
@@ -380,7 +394,7 @@ export class BinanceClient {
         limit: options.limit ?? 500,
       },
       security: "SIGNED",
-      retryable: true,
+      retryable: options.retry ?? true,
     });
   }
 

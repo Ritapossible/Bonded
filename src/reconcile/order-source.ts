@@ -89,6 +89,23 @@ export interface OrderSource {
 // Polling backstop
 // ---------------------------------------------------------------------------
 
+/**
+ * Floor on how long a source may go without a successful pass before it counts as
+ * stalled.
+ *
+ * Health was `intervalMs * 2` alone, which couples staleness tolerance to poll
+ * frequency — so lowering the interval for faster detection silently made the health
+ * check hair-triggered. At a 3-second interval the window was 6 seconds, while one pass
+ * could take far longer, and the gate then denied every order with `auditPath`: "no
+ * order source is delivering", about a source that was delivering.
+ *
+ * With polls no longer retrying internally, a pass costs at most one HTTP timeout per
+ * symbol. 30 seconds sits above that for a realistic symbol count and matches the
+ * window the default 15-second interval already had, so the default behaviour is
+ * unchanged and only short intervals gain the floor.
+ */
+const MIN_STALE_AFTER_MS = 30_000;
+
 export interface PollingOrderSourceOptions {
   readonly client: BinanceClient;
   readonly clock: Clock;
@@ -108,6 +125,7 @@ export class PollingOrderSource implements OrderSource {
   readonly #logger: Logger;
   readonly #symbols: readonly string[];
   readonly #intervalMs: number;
+  readonly #staleAfterMs: number;
   readonly #lookbackMs: number;
 
   #timer: NodeJS.Timeout | undefined;
@@ -122,6 +140,9 @@ export class PollingOrderSource implements OrderSource {
     this.#logger = options.logger.child({ component: "poll-source" });
     this.#symbols = options.symbols;
     this.#intervalMs = options.intervalMs ?? 15_000;
+    // Two missed intervals is a stall rather than jitter — but never shorter than one
+    // pass can legitimately take, or the source is judged dead while still working.
+    this.#staleAfterMs = Math.max(this.#intervalMs * 2, MIN_STALE_AFTER_MS);
     this.#lookbackMs = options.lookbackMs ?? 24 * 60 * 60 * 1000;
   }
 
@@ -131,8 +152,7 @@ export class PollingOrderSource implements OrderSource {
 
   get healthy(): boolean {
     if (this.#lastHealthyAtMs === undefined) return false;
-    // Two missed intervals is a stall, not jitter.
-    return this.#clock.now() - this.#lastHealthyAtMs <= this.#intervalMs * 2;
+    return this.#clock.now() - this.#lastHealthyAtMs <= this.#staleAfterMs;
   }
 
   /**
@@ -173,7 +193,7 @@ export class PollingOrderSource implements OrderSource {
 
     for (const symbol of this.#symbols) {
       const since = this.#since.get(symbol) ?? this.#clock.now() - this.#lookbackMs;
-      const raw = await this.#client.allOrders(symbol, { startTime: since });
+      const raw = await this.#client.allOrders(symbol, { startTime: since, retry: false });
       if (!raw.ok) {
         this.#logFailure(symbol, raw.error);
         continue;

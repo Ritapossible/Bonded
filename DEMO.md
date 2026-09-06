@@ -23,12 +23,16 @@ symbol-scoped polling is acceptable:
 
 ```
 BONDED_ALLOW_PARTIAL_AUDIT=1
-BONDED_POLL_INTERVAL_MS=3000
+BONDED_POLL_INTERVAL_MS=5000
 ```
 
-Three seconds keeps the bypass detection inside one unbroken shot. The bypass targets a
+Five seconds keeps bypass detection inside one unbroken shot. The bypass targets a
 mandate symbol, so the poller sees it; an order on a symbol *outside* the mandate would
 not be seen at all, which is exactly what the banner's WARN is telling you.
+
+Do not go much lower. A poll no longer retries internally, so a pass is bounded, but a
+very short interval still means more requests into a testnet that is not always
+obliging — and a pass that never lands is a pass that cannot detect anything.
 
 Testnet keys come from <https://testnet.binance.vision> (log in with GitHub). The account is
 funded automatically; there is nothing to deposit and no money at risk.
@@ -46,6 +50,16 @@ make. If any line reads `[FAIL]`, BONDED refuses to start and the banner names w
 before recording, not during.
 
 Leave it running. The console is at <http://127.0.0.1:7391>.
+
+Then, in a second shell, confirm the agent-facing surface before you rely on it:
+
+```bash
+npm run smoke
+```
+
+It drives BONDED over MCP and evaluates orders through the gate without placing any —
+so it is safe to run repeatedly, right up to the moment you press record. If the gate is
+misconfigured you find out here rather than on camera.
 
 ## Window layout
 

@@ -190,7 +190,7 @@ here. Until it is, run with:
 
 ```
 BONDED_ALLOW_PARTIAL_AUDIT=1
-BONDED_POLL_INTERVAL_MS=3000
+BONDED_POLL_INTERVAL_MS=5000
 ```
 
 Detection then comes from polling the mandate's symbols every three seconds instead of
@@ -246,7 +246,7 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Owner console — one screen, live over SSE | done |
 | Public API entry point, CI, process-level failure handling | done |
 
-309 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+315 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -320,6 +320,20 @@ authentic needs the HMAC secret, which is the operator's; pass `--secret` if you
 An authentic tag covers the mandate hash and the sequence number — not the order's
 symbol, side, quantity or price. And a log is a claim about what BONDED authorised,
 never proof of what the exchange did.
+
+## Checking it works, without placing anything
+
+```bash
+npm run smoke
+```
+
+Starts BONDED, connects over MCP exactly as an agent does, and asks it questions that
+change nothing: the tool list, the mandate summary, and three orders run through
+`check_order` — which evaluates the whole gate and returns the verdict **without**
+placing an order or consuming an audit-log entry.
+
+Run it before a take, or after changing a mandate. It is repeatable by construction,
+which `npm run redteam` is not.
 
 ## Attacking it yourself
 
@@ -494,7 +508,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 309 tests, ~2s
+npm test           # 315 tests, ~2s
 ```
 
 ## Licence
