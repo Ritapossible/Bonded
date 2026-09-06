@@ -322,10 +322,95 @@ npm run build</code></pre>
         </div>
 
         <h2 id="connect">Connect an agent</h2>
-        <pre><code>claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
         <p>
-          BONDED speaks MCP over stdio. All logging goes to stderr - stdout carries the JSON-RPC
-          frames, and a single stray line there would corrupt the transport.
+          BONDED is an MCP server over stdio, so any MCP client can hold it. It is not tied to one
+          agent - the point of the mandate is that whatever sits behind it gets the same limits.
+          Every client below runs the same command:
+        </p>
+
+        <pre><code>node /absolute/path/to/Bonded/dist/cli.js</code></pre>
+
+        <div class="note note--warn">
+          <p>
+            <strong>Use an absolute path, and pass the credentials in the config.</strong> An agent
+            launches this process itself, often from a desktop app with no shell and a working
+            directory you did not choose. BONDED reads a <code>.env</code> beside its own
+            installation as well as in the working directory, but a GUI-launched client is the case
+            most likely to find neither - so the <code>env</code> block below is the reliable route.
+            Anything already set in the real environment always wins over the file.
+          </p>
+        </div>
+
+        <h3>Claude Code</h3>
+        <pre><code>claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
+
+        <h3>Codex CLI</h3>
+        <p><code>~/.codex/config.toml</code> - TOML, and the table name is plural:</p>
+        <pre><code>[mcp_servers.bonded]
+command = "node"
+args = ["/absolute/path/to/Bonded/dist/cli.js"]
+
+[mcp_servers.bonded.env]
+BINANCE_API_KEY = "..."
+BINANCE_SECRET_KEY = "..."
+BINANCE_API_ENV = "testnet"
+BONDED_HMAC_SECRET = "..."</code></pre>
+
+        <h3>Claude Desktop</h3>
+        <p>
+          <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> on macOS,
+          <code>%APPDATA%\Claude\claude_desktop_config.json</code> on Windows:
+        </p>
+        <pre><code>{
+  "mcpServers": {
+    "bonded": {
+      "command": "node",
+      "args": ["/absolute/path/to/Bonded/dist/cli.js"],
+      "env": {
+        "BINANCE_API_KEY": "...",
+        "BINANCE_SECRET_KEY": "...",
+        "BINANCE_API_ENV": "testnet",
+        "BONDED_HMAC_SECRET": "..."
+      }
+    }
+  }
+}</code></pre>
+
+        <h3>Cursor and Windsurf</h3>
+        <p>
+          Same JSON shape as Claude Desktop, in <code>.cursor/mcp.json</code> for one project or
+          <code>~/.cursor/mcp.json</code> for all of them; Windsurf reads
+          <code>~/.codeium/windsurf/mcp_config.json</code>.
+        </p>
+
+        <h3>VS Code</h3>
+        <p>
+          <code>.vscode/mcp.json</code>. Note the key is <code>servers</code>, not
+          <code>mcpServers</code>:
+        </p>
+        <pre><code>{
+  "servers": {
+    "bonded": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/Bonded/dist/cli.js"]
+    }
+  }
+}</code></pre>
+
+        <h3>Anything else</h3>
+        <p>
+          Any client that speaks MCP over stdio works. It needs three things: the command
+          (<code>node</code>), one argument (the absolute path to <code>dist/cli.js</code>), and the
+          environment. Config file locations move between versions - if one of the paths above has
+          changed, check that client's own documentation for where its MCP config lives; the server
+          side is identical either way.
+        </p>
+        <p>
+          All logging goes to stderr - stdout carries the JSON-RPC frames, and a single stray line
+          there would corrupt the transport. If a client reports the server as failed, run the
+          command by hand first: the boot-guard banner prints the reason, and a guard that fails is
+          a refusal to start rather than a crash.
         </p>
 
         <h2 id="mandate">Mandate</h2>

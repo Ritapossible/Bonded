@@ -55,11 +55,18 @@ openssl rand -hex 32      # -> BONDED_HMAC_SECRET
 cp examples/mandate.example.json data/mandate.json
 ```
 
-Register the MCP server with your agent:
+Register the MCP server with your agent. BONDED speaks MCP over stdio, so any MCP client
+works — Claude Code, Codex CLI, Claude Desktop, Cursor, Windsurf, VS Code:
 
 ```bash
 claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js
 ```
+
+For a client that uses a config file, the command is `node` and the single argument is the
+absolute path to `dist/cli.js`. Pass the credentials in that config's `env` block: an agent
+launched from a desktop app has no shell, and BONDED will not find your `.env` if it also
+runs from a directory you did not choose. Full per-client configs are in the
+[documentation](https://bonded-one.vercel.app/docs#connect).
 
 BONDED prints a boot-guard banner to stderr and **refuses to start** if any guard fails —
 wrong environment, expired mandate, broken audit chain, clock skew, or no readable order

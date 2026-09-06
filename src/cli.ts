@@ -19,6 +19,7 @@ import { readFile } from "node:fs/promises";
 import { DecisionLog } from "./audit/decision-log.js";
 import { BinanceClient } from "./binance/client.js";
 import { anyGuardFailed, formatGuardBanner, runBootGuards } from "./boot/guards.js";
+import { loadDotenv } from "./config/dotenv.js";
 import { describeConfig, loadConfig } from "./config/env.js";
 import { systemClock } from "./core/clock.js";
 import { describeUnknownError } from "./core/errors.js";
@@ -75,6 +76,10 @@ async function loadMandate(path: string): Promise<Mandate | undefined> {
 const STREAM_CONNECT_TIMEOUT_MS = 10_000;
 
 async function main(): Promise<number> {
+  // Before config, because `.env` is where the documented setup puts the keys. Values
+  // already in the environment win, so this can only ever fill in blanks.
+  const dotenv = loadDotenv();
+
   const config = loadConfig();
   if (!config.ok) {
     emit(`configuration error: ${config.error.message}`);
@@ -83,6 +88,13 @@ async function main(): Promise<number> {
   }
 
   const logger: Logger = createLogger({ level: config.value.logLevel });
+  if (dotenv.path !== undefined) {
+    // Names only. The values are the reason this file exists.
+    logger.info(
+      { path: dotenv.path, applied: dotenv.applied, alreadySet: dotenv.skipped },
+      "loaded environment file",
+    );
+  }
   logger.info({ config: describeConfig(config.value), version: VERSION }, "bonded starting");
 
   const mandate = await loadMandate(config.value.mandatePath);
