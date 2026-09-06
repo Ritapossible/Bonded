@@ -27,6 +27,7 @@ import { canonicalize, sha256Hex } from "../core/canonical.js";
 import { ErrorCode, bondedError, describeUnknownError, type BondedError } from "../core/errors.js";
 import { err, ok, type Result } from "../core/result.js";
 import { GENESIS_HASH, type DecisionRecord } from "../domain/decision.js";
+import { acquireLogLock } from "./log-lock.js";
 
 export interface ChainState {
   readonly nextSeq: number;
@@ -153,17 +154,24 @@ export async function verifyChain(path: string): Promise<Result<ChainState, Bond
 export class DecisionLog {
   readonly #handle: FileHandle;
   readonly #path: string;
+  readonly #releaseLock: () => Promise<void>;
   #nextSeq: number;
   #headHash: string;
   /** Append queue. Concurrent writes would interleave prevHash values. */
   #tail: Promise<unknown> = Promise.resolve();
   #closed = false;
 
-  private constructor(handle: FileHandle, path: string, state: ChainState) {
+  private constructor(
+    handle: FileHandle,
+    path: string,
+    state: ChainState,
+    releaseLock: () => Promise<void>,
+  ) {
     this.#handle = handle;
     this.#path = path;
     this.#nextSeq = state.nextSeq;
     this.#headHash = state.headHash;
+    this.#releaseLock = releaseLock;
   }
 
   static async open(path: string): Promise<Result<DecisionLog, BondedError>> {
@@ -190,10 +198,17 @@ export class DecisionLog {
       return verified;
     }
 
+    // Before opening for append: one writer only. Two instances interleave their
+    // `prevHash` values and corrupt the chain, which surfaces as a refusal to boot on a
+    // trail BONDED broke itself.
+    const lock = await acquireLogLock(path);
+    if (!lock.ok) return lock;
+
     try {
       const handle = await open(path, "a");
-      return ok(new DecisionLog(handle, path, state));
+      return ok(new DecisionLog(handle, path, state, lock.value));
     } catch (cause: unknown) {
+      await lock.value();
       return err(
         bondedError(
           ErrorCode.DECISION_LOG_IO,
@@ -289,5 +304,6 @@ export class DecisionLog {
     this.#closed = true;
     await this.#tail.catch(() => undefined);
     await this.#handle.close();
+    await this.#releaseLock().catch(() => undefined);
   }
 }

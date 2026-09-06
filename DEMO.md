@@ -43,13 +43,29 @@ Run it once before recording:
 npm start
 ```
 
-You are looking for four `[PASS]` lines and one `[WARN]`. The WARN on
-`withdrawalPermission` is expected and correct — Spot Testnet has no `apiRestrictions`
-endpoint, so the guard reports what it checked instead of claiming a check it could not
-make. If any line reads `[FAIL]`, BONDED refuses to start and the banner names why; fix that
-before recording, not during.
+You are looking for **eight `[PASS]` lines and three `[WARN]`**, ending in
+`BONDED ready`. All three warnings are expected and correct on Spot Testnet:
 
-Leave it running. The console is at <http://127.0.0.1:7391>.
+| Warning | Why it is right |
+| --- | --- |
+| `withdrawalPermission` | `apiRestrictions` does not exist on testnet, so the guard reports what it actually checked instead of claiming a check it could not make |
+| `userDataStream` | Binance removed the listen-key endpoints in February 2026; it says so once and does not retry |
+| `auditCoverage` | DEGRADED, because polling only covers mandate symbols — which is what `BONDED_ALLOW_PARTIAL_AUDIT=1` accepted |
+
+If any line reads `[FAIL]`, BONDED refuses to start and the banner names why; fix that
+before recording, not during. `clockSkew` is the one most likely to bite: run
+`w32tm /resync` (Windows, as Administrator) or `sudo chronyc makestep` right beforehand,
+because a clock more than 500 ms **ahead** of the exchange is rejected by Binance on
+every signed request.
+
+Then **stop it** with Ctrl+C. This run is a pre-flight check, not the instance you
+record with.
+
+That matters more than it sounds. The agent launches its *own* BONDED when you register
+the MCP server below, from this same directory — so leaving `npm start` running means two
+instances appending to one hash-chained decision log. BONDED now refuses the second one
+rather than corrupting the trail, but the refusal is still a stopped demo. One instance,
+started by the agent, owning the console.
 
 Then, in a second shell, confirm the agent-facing surface before you rely on it:
 
@@ -73,6 +89,16 @@ Two windows, side by side, nothing else on screen.
 ```bash
 claude mcp add bonded -- node "$(pwd)/dist/cli.js"
 ```
+
+That registers the server; it does not start anything. Now launch the agent:
+
+```bash
+claude
+```
+
+Claude Code spawns BONDED as a subprocess on that first run, which is what serves the
+console on the right-hand side. The prompts in the take below are typed **at the Claude
+prompt**, not into a shell.
 
 Optionally register Binance's own MCP server too, with the **Market data** scope only. It
 costs nothing on camera and it answers the question a judge is entitled to ask — whether
