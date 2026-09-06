@@ -413,6 +413,30 @@ BONDED_HMAC_SECRET = "..."</code></pre>
           a refusal to start rather than a crash.
         </p>
 
+        <h3>Alongside Binance's own MCP server</h3>
+        <p>
+          BONDED does not replace Binance's MCP server. It sits next to it. Register both and the
+          agent reads from Binance and writes through the mandate:
+        </p>
+        <pre><code>claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
+        <p>
+          Grant Binance's server the <strong>Market data</strong> scope and withhold
+          <strong>Trade</strong>. That division is the whole pairing: market data is public and
+          needs no credentials, so the agent gets tickers, order books and candles from Binance
+          directly, and every order it decides to place goes through BONDED - checked against the
+          mandate and written to the hash-chained log before it is signed.
+        </p>
+        <p>
+          The two reach different accounts, and it is worth being exact about why. Binance's MCP
+          server trades a dedicated Agentic sub-account on mainnet, over OAuth, with every trade
+          confirmed by a human and no withdrawal scope in existence. That path is already guarded,
+          and BONDED has nothing to add to it. BONDED guards the other path - raw API keys, no
+          confirmation step - which is the one an unattended agent actually runs on, and the one
+          Binance left open. Composed, the agent has Binance's market data on one side and a bound,
+          audited account on the other.
+        </p>
+
         <h2 id="mandate">Mandate</h2>
         <p>
           The complete statement of what the agent may do. It is data, not code: compiled once,
@@ -432,7 +456,7 @@ BONDED_HMAC_SECRET = "..."</code></pre>
   "dailyLossLimitUsd": "50",
   "maxDrawdownPct": "5",
   "tradingWindowUtc": ["00:00", "23:59"],
-  "expiresAt": "2026-09-08T23:59:00.000Z"
+  "expiresAt": "2027-09-08T23:59:00.000Z"
 }</code></pre>
 
         <p>
@@ -765,7 +789,7 @@ BONDED_HMAC_SECRET = "..."</code></pre>
 
         <pre><code>BONDED boot guards
   [PASS] environment           testnet confirmed, base URL https://testnet.binance.vision
-  [PASS] mandate               mandate ed1ff01a valid until 2026-09-08T23:59:00.000Z
+  [PASS] mandate               mandate 8b80eb8e valid until 2027-09-08T23:59:00.000Z
   [WARN] withdrawalPermission  not verified: apiRestrictions is unavailable on Spot Testnet
   [PASS] decisionLog           chain verified over 128 records, head 4f2ab910
   [PASS] clockSkew             clock within 42 ms of exchange
@@ -909,7 +933,7 @@ BONDED_HMAC_SECRET = "..."</code></pre>
 
         <h2 id="development">Development</h2>
         <pre><code>npm run check      # typecheck, lint, format, tests
-npm test           # 147 tests
+npm test           # 283 tests
 npm run build      # compile to dist/</code></pre>
         <p>
           The gate is a pure function, so it is tested exhaustively without mocks. The Binance

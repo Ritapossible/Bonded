@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SOURCE = join(ROOT, "site");
 const OUTPUT = join(ROOT, "dist-site");
-const FALLBACK_ORIGIN = "https://bonded.vercel.app";
+const FALLBACK_ORIGIN = "https://bonded-one.vercel.app";
 const SUBSTITUTED_EXTENSIONS = [".html", ".txt", ".xml", ".webmanifest"];
 
 /** The origin this deployment will be reachable at, without a trailing slash. */

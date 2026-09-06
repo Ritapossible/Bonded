@@ -174,7 +174,7 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Owner console — one screen, live over SSE | done |
 | Public API entry point, CI, process-level failure handling | done |
 
-147 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+283 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -300,7 +300,7 @@ run if anything fails:
 ```
 BONDED boot guards
   [PASS] environment           testnet confirmed, base URL https://testnet.binance.vision
-  [PASS] mandate               mandate ed1ff01a valid until 2026-09-08T23:59:00.000Z
+  [PASS] mandate               mandate 8b80eb8e valid until 2027-09-08T23:59:00.000Z
   [WARN] withdrawalPermission  not verified: apiRestrictions is unavailable on Spot Testnet.
                                Asserted BINANCE_API_ENV=testnet instead
   [PASS] decisionLog           no existing log; starting at genesis
@@ -319,6 +319,21 @@ To connect an agent:
 claude mcp add bonded -- node /path/to/bonded/dist/cli.js
 ```
 
+BONDED does not replace Binance's own MCP server; it runs alongside it. Register both and
+the agent reads from Binance and writes through the mandate:
+
+```bash
+claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+claude mcp add bonded -- node /path/to/bonded/dist/cli.js
+```
+
+Grant Binance's server the **Market data** scope and withhold **Trade**. Market data is
+public and needs no credentials; every order the agent then decides to place goes through
+BONDED. The division is the thesis: Binance's MCP path trades an Agentic sub-account over
+OAuth with every trade confirmed by a human and no withdrawal scope in existence — already
+guarded, nothing for BONDED to add. BONDED guards the other path, the one an unattended
+agent actually runs on.
+
 To preview the console UI without credentials — **synthetic data, not a demo of the
 system** — run `node scripts/console-preview.mjs`. The real demo is
 `tests/integration/bypass-detection.test.ts`.
@@ -327,7 +342,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 147 tests, ~1.7s
+npm test           # 283 tests, ~3s
 ```
 
 ## Licence

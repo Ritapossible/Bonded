@@ -10,7 +10,7 @@ stamped client order id, or `DENIED` naming the exact mandate clause it breached
 The skill does not decide what to trade. It produces no signals, strategies or
 recommendations; it enforces limits an owner wrote and reports what it refused and why.
 
-Source: <https://github.com/Ritapossible/Bonded> — MIT, 147 tests, typecheck and lint clean.
+Source: <https://github.com/Ritapossible/Bonded> — MIT, 283 tests, typecheck and lint clean.
 
 # APIs Used
 
@@ -54,7 +54,7 @@ and hashed. That `mandateHash` is stamped into every audit record, so a record a
 one exact ruleset and the rules cannot be quietly widened while the trail is kept.
 
 **2. The gate.** A pure function of `(mandate, intent, exchange state, now)` — no I/O, no
-clock reads — evaluating fifteen clauses in a fixed order. It fails closed: stale exchange
+clock reads — evaluating seventeen clauses in a fixed order. It fails closed: stale exchange
 state, a missing reference price, or an unresolvable symbol all deny rather than pass. Every
 denial names the clause that fired, with the observed value and the limit.
 

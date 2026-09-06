@@ -39,7 +39,8 @@ Repository: <https://github.com/Ritapossible/Bonded>
 
 - **Deciding what to trade.** BONDED enforces limits; it produces no signals, strategies
   or recommendations. Pair it with whatever decides.
-- **Reading market data.** Use the Binance MCP server or the `binance` skill.
+- **Reading market data.** Use Binance's own MCP server or the `binance` skill; BONDED
+  is built to run alongside them (see below).
 - **Anything but Spot.** Futures and margin are out of scope in this version.
 
 ## Setup
@@ -72,6 +73,27 @@ BONDED prints a boot-guard banner to stderr and **refuses to start** if any guar
 wrong environment, expired mandate, broken audit chain, clock skew, or no readable order
 history. A guard that cannot perform its check reports `WARN` and says what it checked
 instead; it never claims a check it did not make.
+
+### Alongside Binance's own MCP server
+
+BONDED does not replace Binance's MCP server; it sits next to it. Register both and the
+agent reads from Binance and writes through the mandate:
+
+```bash
+claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js
+```
+
+Grant Binance's server the **Market data** scope and withhold **Trade**. Market data is
+public and needs no credentials, so the agent gets tickers, order books and candles from
+Binance directly; every order it then decides to place goes through BONDED, checked against
+the mandate and written to the hash-chained log before it is signed.
+
+The two reach different accounts, deliberately. Binance's MCP server trades a dedicated
+Agentic sub-account over OAuth, with every trade confirmed by a human and no withdrawal
+scope in existence — that path is already guarded and BONDED has nothing to add to it.
+BONDED guards the other path: raw API keys, no confirmation step, which is what an
+unattended agent actually runs on.
 
 ## Tools
 

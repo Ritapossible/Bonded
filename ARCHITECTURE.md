@@ -114,7 +114,7 @@ spec the owner can see, not a wrong decision they cannot.
   "dailyLossLimitUsd": 50,
   "maxDrawdownPct": 5,
   "tradingWindowUtc": ["00:00", "23:59"],
-  "expiresAt": "2026-09-08T23:59:00Z"
+  "expiresAt": "2027-09-08T23:59:00Z"
 }
 ```
 

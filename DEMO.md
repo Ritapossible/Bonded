@@ -46,6 +46,18 @@ Two windows, side by side, nothing else on screen.
 claude mcp add bonded -- node "$(pwd)/dist/cli.js"
 ```
 
+Optionally register Binance's own MCP server too, with the **Market data** scope only. It
+costs nothing on camera and it answers the question a judge is entitled to ask — whether
+this is really built alongside Agent OS or merely next to it:
+
+```bash
+claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+```
+
+The agent then reads prices from Binance and places orders through BONDED. Do not grant it
+the Trade scope: that path confirms every trade with a human and has nothing to do with
+what this demo is about.
+
 Put the terminal font up two sizes. Half the audience watches this on a phone.
 
 ## The take

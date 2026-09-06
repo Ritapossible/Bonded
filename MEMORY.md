@@ -189,7 +189,7 @@ product. B402/x402 is a separate thing entirely. This was confused once; don't r
 | Decision | Reasoning |
 | --- | --- |
 | **Pure gate, imperative shell** | `evaluate()` is a pure function of (mandate, intent, state, now). No I/O, no clock reads. Makes it exhaustively testable and deterministic under replay |
-| **All 15 clauses in one file** | A security boundary should be auditable on one screen. A `clauses/` directory makes "what does this actually enforce?" unanswerable without reading everything |
+| **All clauses in one file** | A security boundary should be auditable on one screen. A `clauses/` directory makes "what does this actually enforce?" unanswerable without reading everything |
 | **`Result<T, E>` for expected failures; throw only for programmer errors** | An uncaught throw inside a gate is indistinguishable from "no rule fired" — that is precisely how a gate fails open |
 | **Every monetary value is a decimal string** | `0.1 + 0.2 !== 0.3` is not acceptable in a limit check. `decimal.js` is confined to `core/money.ts`; everything above it handles branded `DecimalString` |
 | **Restricted RFC 8785 canonicalisation** | Full JCS has to serialise arbitrary doubles, which is the fiddly part. Since no float ever reaches it, the serialiser rejects non-integer numbers rather than guessing a spelling |

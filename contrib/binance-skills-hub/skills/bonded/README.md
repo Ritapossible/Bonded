@@ -35,12 +35,30 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js
 
 On startup it prints a boot-guard banner to stderr and refuses to run if any guard fails.
 
+### Alongside Binance's own MCP server
+
+This skill does not replace Binance's MCP server; it runs next to it. Register both and the
+agent reads from Binance and writes through the mandate:
+
+```bash
+claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js
+```
+
+Grant Binance's server the **Market data** scope and withhold **Trade**. Market data is
+public and needs no credentials; every order the agent then decides to place goes through
+the mandate gate. The division is deliberate: Binance's MCP path trades an Agentic
+sub-account over OAuth with every trade confirmed by a human and no withdrawal scope in
+existence, so it is already guarded. This skill guards the other path - raw API keys, no
+confirmation step - which is what an unattended agent runs on.
+
 ## Tools
 
 | Tool | Purpose |
 | --- | --- |
 | `place_order` | Submit a Spot order. Returns `PLACED`, `DENIED` or `FAILED` |
 | `check_order` | Evaluate without placing, and without consuming an audit entry |
+| `cancel_order` | Cancel an order by its client order id. Never refused - cancelling only reduces exposure |
 | `get_mandate_summary` | Mandate hash, expiry, clause names, scope status |
 | `get_account` | Balances and open-order count, with the observation time |
 
