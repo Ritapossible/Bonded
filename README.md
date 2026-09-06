@@ -261,7 +261,18 @@ client id forged into BONDED's namespace, and a raw API order with no BONDED in 
 at all. The last one fills — that is the point — and then the reconciler finds it, the
 bond burns, and every later order is refused.
 
+It is self-contained: it starts its own BONDED, connects over MCP the way an agent
+does, and drives every attack itself. Nothing to set up first, nothing to type during a
+take. It prints the decision log's head at the end — publish that, and anyone can check
+the run with `verify --head`.
+
 Testnet only, with no override, for the same reason as `scripts/bypass-order.mjs`.
+
+**Stop any BONDED you already have running first.** The bypass is a real order on the
+real account, and a separate instance is watching that same account — so it will detect
+the order and burn its own bond, which is the correct behaviour and ruins a take if you
+are mid-recording. Separate log files cannot prevent this: reconciling against the
+shared account is the whole mechanism.
 
 ## Deploying the site
 

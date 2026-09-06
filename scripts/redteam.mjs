@@ -130,13 +130,24 @@ const workDir = await mkdtemp(join(tmpdir(), "bonded-redteam-"));
 const logPath = join(workDir, "decisions.jsonl");
 const consolePort = Number(process.env.REDTEAM_CONSOLE_PORT ?? 7392);
 
+// The bypass below is a real order on the real account. A separate BONDED you have
+// running is watching that same account, so it will see the order, classify it FOREIGN
+// and burn its own bond — mid-recording, if you are recording. Its own log and port
+// keep the *files* apart; nothing can keep the *account* apart, because reconciling
+// against the shared account is the entire mechanism.
+process.stdout.write(
+  "\n  This places real orders on the account, including one that goes around BONDED.\n" +
+    "  Any other BONDED you have running will detect it and burn its bond too.\n" +
+    "  Stop it first if you are mid-recording.\n",
+);
 process.stdout.write("\n  Starting a BONDED instance and connecting to it over MCP…\n");
 
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [join(ROOT, "dist", "cli.js")],
-  // Its own decision log and console port, so a red-team run never disturbs an instance
-  // the operator already has running.
+  // Its own decision log and console port, so the run does not collide with an
+  // instance the operator already has running. This separates the files, not the
+  // account — see the warning above.
   env: {
     ...process.env,
     BONDED_DECISION_LOG_PATH: logPath,

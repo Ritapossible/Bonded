@@ -108,6 +108,7 @@ Then go back to the agent and ask for anything at all. It is refused with `scope
 | Bypass order rejected for `LOT_SIZE` | Quantity below the symbol's step size | Raise it: `node scripts/bypass-order.mjs BTCUSDT BUY 0.002` |
 | Console shows nothing after the bypass | User data stream dropped | The polling backstop still catches it, within `BONDED_POLL_INTERVAL_MS` (15s default) |
 | Everything is refused before you start | The bond is already burned from a previous take | Reset between takes (below) |
+| The bond burned while you were setting up | `npm run redteam` was run with this instance live | Expected: the red team places a real order on the same account. Stop the recording instance before running it, then reset |
 
 ## Resetting between takes
 
