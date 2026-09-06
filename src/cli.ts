@@ -23,6 +23,7 @@ import { loadDotenv } from "./config/dotenv.js";
 import { describeConfig, loadConfig } from "./config/env.js";
 import { systemClock } from "./core/clock.js";
 import { describeUnknownError } from "./core/errors.js";
+import { err, ok, type Result } from "./core/result.js";
 import { compileMandate, type Mandate } from "./domain/mandate.js";
 import { StateProvider } from "./engine/state-provider.js";
 import { TradingEngine } from "./engine/trading-engine.js";
@@ -43,6 +44,21 @@ const VERSION = "0.1.0";
 /** Write to stderr directly. stdout belongs to the MCP transport. */
 function emit(text: string): void {
   process.stderr.write(`${text}\n`);
+}
+
+/**
+ * Report output for the `verify` subcommand, on stdout.
+ *
+ * Everything else in this process writes to stderr, because stdout carries the MCP
+ * JSON-RPC frames and one stray line there corrupts the transport. `verify` is the
+ * exception and is safe: it is a one-shot subcommand that returns an exit code without
+ * ever starting the server, so there is no transport to corrupt. It needs stdout
+ * because its report is the product — `bonded verify log > report.txt`, or piping it
+ * to read the head back out, is the whole point of the command, and on stderr both
+ * produce an empty file.
+ */
+function say(text: string): void {
+  process.stdout.write(`${text}\n`);
 }
 
 async function loadMandate(path: string): Promise<Mandate | undefined> {
@@ -351,34 +367,55 @@ async function main(): Promise<number> {
 }
 
 /**
- * `bonded verify <log> [--secret <hex>]`
+ * `bonded verify <log> [--secret <hex>] [--head <hex>]`
  *
  * A subcommand rather than a separate binary so that the thing which verifies a log
  * ships with the thing that wrote it, at the same version.
+ *
+ * `--head` is the one that makes the result mean something to a stranger: pin the log
+ * against a head hash published before the fact and a tail edit or an appended record
+ * fails, which a chain walk on its own cannot catch.
  */
 async function verifyCommand(argv: readonly string[]): Promise<number> {
   const path = argv[0];
   if (path === undefined || path.startsWith("-")) {
-    emit("usage: bonded verify <decision-log.jsonl> [--secret <hmac-secret>]");
+    emit("usage: bonded verify <decision-log.jsonl> [--secret <hmac-secret>] [--head <hex>]");
+    // Usage goes to stderr: it is a diagnostic, not the report.
     return 78; // EX_CONFIG
   }
 
-  const secretFlag = argv.indexOf("--secret");
-  const secret = secretFlag === -1 ? undefined : argv[secretFlag + 1];
-  if (secretFlag !== -1 && secret === undefined) {
-    emit("--secret needs a value");
+  /** Reads `--flag value`, distinguishing "absent" from "given without a value". */
+  function flag(name: string): Result<string | undefined, string> {
+    const at = argv.indexOf(name);
+    if (at === -1) return ok(undefined);
+    const value = argv[at + 1];
+    if (value === undefined || value.startsWith("-")) return err(`${name} needs a value`);
+    return ok(value);
+  }
+
+  const secret = flag("--secret");
+  if (!secret.ok) {
+    emit(secret.error);
+    return 78;
+  }
+  const head = flag("--head");
+  if (!head.ok) {
+    emit(head.error);
     return 78;
   }
 
-  const result = await verifyDecisionLog(path, secret === undefined ? {} : { hmacSecret: secret });
+  const result = await verifyDecisionLog(path, {
+    ...(secret.value === undefined ? {} : { hmacSecret: secret.value }),
+    ...(head.value === undefined ? {} : { expectedHead: head.value }),
+  });
   if (!result.ok) {
-    emit(`\nBONDED decision log — ${path}\n`);
-    emit(`  NOT VERIFIED: ${result.error.message}`);
-    emit(`  ${JSON.stringify(result.error.details)}\n`);
+    say(`\nBONDED decision log — ${path}\n`);
+    say(`  NOT VERIFIED: ${result.error.message}`);
+    say(`  ${JSON.stringify(result.error.details)}\n`);
     return 1;
   }
 
-  emit(formatVerification(path, result.value));
+  say(formatVerification(path, result.value));
   // A log citing more than one mandate is not corrupt, but it is not a clean bill of
   // health either, and the exit code should not say it is.
   return result.value.mandateHashes.length > 1 ? 1 : 0;

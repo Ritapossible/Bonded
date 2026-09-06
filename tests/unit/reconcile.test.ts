@@ -9,7 +9,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { DecisionLog } from "../../src/audit/decision-log.js";
 import { mintClientOrderId } from "../../src/audit/client-order-id.js";
 import { FixedClock } from "../../src/core/clock.js";
@@ -188,11 +188,11 @@ describe("classify", () => {
 describe("Reconciler", () => {
   let index: AuthorisationIndex;
   let reconciler: Reconciler;
-  let onFinding: ReturnType<typeof vi.fn>;
+  let onFinding: Mock<(finding: Finding) => void>;
 
   beforeEach(() => {
     index = new AuthorisationIndex();
-    onFinding = vi.fn();
+    onFinding = vi.fn<(finding: Finding) => void>();
     reconciler = new Reconciler({
       index,
       hmacSecret: SECRET,

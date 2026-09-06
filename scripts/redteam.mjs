@@ -39,6 +39,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { verifyDecisionLog } from "../dist/verify/verify-log.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TESTNET = "https://testnet.binance.vision";
@@ -296,8 +297,21 @@ try {
   report();
 
   if (!AS_JSON) {
+    // Print the head, and say what it is for. A chain walk cannot detect an edit to the
+    // *last* record or a correctly-chained append — the hash is unkeyed, so anyone can
+    // extend it. Publishing this head before anyone can dispute the run is what makes a
+    // later `--head` check mean something.
+    const verified = await verifyDecisionLog(logPath);
     process.stdout.write(`  Decision log: ${logPath}\n`);
-    process.stdout.write(`  Verify it yourself:  node dist/cli.js verify ${logPath}\n\n`);
+    if (verified.ok) {
+      process.stdout.write(`  Head:         ${verified.value.chain.headHash}\n`);
+      process.stdout.write("  Publish that head now — it commits to this whole run.\n\n");
+      process.stdout.write("  Verify it yourself:\n");
+      process.stdout.write(`    node dist/cli.js verify ${logPath} \\\n`);
+      process.stdout.write(`      --head ${verified.value.chain.headHash}\n\n`);
+    } else {
+      process.stdout.write(`  Verify it yourself:  node dist/cli.js verify ${logPath}\n\n`);
+    }
   }
 } finally {
   await client.close().catch(() => undefined);

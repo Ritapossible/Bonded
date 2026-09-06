@@ -123,6 +123,7 @@
             <a href="#pnl">Realised PnL</a>
             <a href="#reconciliation">Reconciliation</a>
             <a href="#audit-log">Audit log</a>
+            <a href="#verify">Verifying a run</a>
 
             <h4>Reference</h4>
             <a href="#tools">MCP tools</a>
@@ -203,7 +204,20 @@
         <pre><code>git clone https://github.com/Ritapossible/Bonded
 cd Bonded
 npm install
-npm run build</code></pre>
+npm run build
+
+cp .env.example .env      # fill in BINANCE_API_KEY and BINANCE_SECRET_KEY
+openssl rand -hex 32      # -&gt; BONDED_HMAC_SECRET in .env
+
+mkdir -p data
+cp examples/mandate.example.json data/mandate.json
+
+npm start</code></pre>
+        <p>
+          The <code>data/</code> directory is not in the repository - it holds runtime state, which
+          is deliberately not committed - so <code>mkdir -p data</code> comes before the copy.
+          BONDED creates the decision log itself; the mandate is the one file you supply.
+        </p>
 
         <h2 id="configuration">Configuration</h2>
         <p>
@@ -678,6 +692,50 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
           impossible, which is the realistic threat.
         </p>
 
+        <h2 id="verify">Verifying a run</h2>
+        <p>
+          The demo shows a bypass being caught, and you have no reason to believe it - every frame
+          could be staged. So the log is checkable by anyone, without running BONDED, without an API
+          key, and without trusting whoever recorded the video. A sample log ships in the
+          repository, written by the real writer, so the command can be tried offline:
+        </p>
+        <pre><code>node dist/cli.js verify examples/sample-decisions.jsonl</code></pre>
+        <p>
+          Holding nothing but the file, that verifies the hash chain from genesis, that sequence
+          numbers are contiguous and that every record cites one mandate hash - and prints the
+          exchange order ids, which are checkable against Binance independently of this project.
+        </p>
+
+        <h3>What a chain walk cannot do</h3>
+        <p>
+          The chain hash is unkeyed, so anyone can compute it. Walking the chain pins each record
+          against the one after it, which leaves the <strong>last</strong> record pinned by nothing.
+          Editing the final record, or appending one with a correctly computed
+          <code>prevHash</code>, therefore survives a chain walk - and both are exactly what faking
+          a demo would look like. The command reports them as unchecked rather than passing them off
+          as verified.
+        </p>
+        <p>
+          Closing that needs no secret, only a commitment made in advance. The head hash commits to
+          the whole history: publish it - say it on camera, put it in a README - and pass it back.
+        </p>
+        <pre><code>node dist/cli.js verify examples/sample-decisions.jsonl \
+  --head 54aaa41cc363c850f66d81d583dbe0dbaa15587c00679e65369890b644669ee8</code></pre>
+        <p>
+          That is the head of the sample log, published here so the check means something. Change
+          any byte of that file, the tail included, and the command exits non-zero.
+        </p>
+
+        <div class="note">
+          <p>
+            <strong>What it still does not claim.</strong> Whether each stamped client order id is
+            authentic needs the HMAC secret, which is the operator's - pass <code>--secret</code> if
+            you hold it. An authentic tag covers the mandate hash and the sequence number, not the
+            order's symbol, side, quantity or price. And a log is a claim about what BONDED
+            authorised, never proof of what the exchange did.
+          </p>
+        </div>
+
         <h2 id="tools">MCP tools</h2>
 
         <h3><code>place_order</code></h3>
@@ -933,7 +991,7 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
 
         <h2 id="development">Development</h2>
         <pre><code>npm run check      # typecheck, lint, format, tests
-npm test           # 283 tests
+npm test           # 289 tests
 npm run build      # compile to dist/</code></pre>
         <p>
           The gate is a pure function, so it is tested exhaustively without mocks. The Binance

@@ -174,7 +174,7 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Owner console — one screen, live over SSE | done |
 | Public API entry point, CI, process-level failure handling | done |
 
-283 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+289 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -206,26 +206,48 @@ them, because an agent that can read its limits can sit exactly inside them.
 ## Verifying a run without trusting it
 
 The demo shows a bypass being caught. You have no reason to believe it — every frame
-could be staged. So the log the run produced is published, and anyone can check it:
+could be staged. So the log is checkable. A sample log ships in the repository, written
+by the real writer, so the verifier can be tried offline with no keys and no account:
 
 ```bash
-npx bonded verify examples/demo-decisions.jsonl
+node dist/cli.js verify examples/sample-decisions.jsonl
 ```
 
 Holding nothing but the file, that verifies the hash chain from genesis, that sequence
 numbers are contiguous, that every record cites the same mandate hash — and prints the
 exchange order ids so you can check them against Binance yourself.
 
-It also states what it did **not** check. Whether each stamped client order id is
-authentic needs the HMAC secret, which is the operator's; pass `--secret` if you hold it.
-And a log is a claim about what BONDED authorised, never proof of what the exchange did.
-
-Edit one field, delete one record, or append one you invented, and it fails:
+Edit a record in the middle, or delete one, and it fails:
 
 ```
   NOT VERIFIED: decision log hash chain is broken
   {"lineNumber":3,"seq":2,"expectedPrevHash":"287d…","actualPrevHash":"3563…"}
 ```
+
+### What a chain walk cannot do, and the flag that fixes it
+
+The chain hash is unkeyed, so anyone can compute it. Walking the chain pins every record
+against the one after it — which leaves the **last** record pinned by nothing. Editing
+the final record, or appending a new one with a correctly computed `prevHash`, therefore
+survives a chain walk. Both are precisely what faking a demo would look like, so the
+command reports them as unchecked rather than passing them off as verified.
+
+Closing it needs no secret, only a commitment made in advance. The head hash commits to
+the entire history: publish it — say it on camera, put it in a README — and pass it back:
+
+```bash
+node dist/cli.js verify examples/sample-decisions.jsonl \
+  --head 54aaa41cc363c850f66d81d583dbe0dbaa15587c00679e65369890b644669ee8
+```
+
+That is the head of the sample log above, published here so the check means something.
+Change any byte of that file, tail included, and the command exits non-zero.
+
+It also states what it did **not** check. Whether each stamped client order id is
+authentic needs the HMAC secret, which is the operator's; pass `--secret` if you hold it.
+An authentic tag covers the mandate hash and the sequence number — not the order's
+symbol, side, quantity or price. And a log is a claim about what BONDED authorised,
+never proof of what the exchange did.
 
 ## Attacking it yourself
 
@@ -289,6 +311,7 @@ npm run build
 
 cp .env.example .env          # then fill in testnet key, secret, and:
 openssl rand -hex 32          # -> BONDED_HMAC_SECRET
+mkdir -p data
 cp examples/mandate.example.json data/mandate.json
 
 npm start
@@ -342,7 +365,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 283 tests, ~3s
+npm test           # 289 tests, ~2s
 ```
 
 ## Licence

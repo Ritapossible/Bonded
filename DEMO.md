@@ -11,6 +11,7 @@ This file is the mechanics.
 ```bash
 npm ci && npm run build
 
+mkdir -p data
 cp examples/mandate.example.json data/mandate.json
 cp .env.example .env          # fill in the two testnet keys
 openssl rand -hex 32          # -> BONDED_HMAC_SECRET in .env

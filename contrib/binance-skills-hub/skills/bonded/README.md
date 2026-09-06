@@ -24,6 +24,7 @@ npm install && npm run build
 
 cp .env.example .env      # BINANCE_API_KEY, BINANCE_SECRET_KEY
 openssl rand -hex 32      # -> BONDED_HMAC_SECRET
+mkdir -p data
 cp examples/mandate.example.json data/mandate.json
 ```
 

@@ -198,6 +198,103 @@ describe("tampering a faked demo would need", () => {
   });
 });
 
+describe("what a chain walk cannot catch on its own", () => {
+  /**
+   * These two are the reason `--head` exists, and both shipped undetected.
+   *
+   * The chain pins each record against the one after it, so the *last* record is pinned
+   * by nothing, and the hash is unkeyed so anyone can extend it. Editing the tail and
+   * appending a well-formed record are therefore both invisible to a chain walk — and
+   * both are exactly what faking a demo looks like. The earlier tests missed it because
+   * they edited a middle record and appended a *malformed* one.
+   */
+
+  it("does not detect an edited final record, and says so instead of claiming verified", async () => {
+    await writeDemoLog();
+    const before = await verifyDecisionLog(path);
+    const head = unwrap(before, "before").chain.headHash;
+
+    // The last record is the cancellation. Change what was cancelled.
+    await editLine(4, (line) => line.replace('"ETHUSDT"', '"BTCUSDT"'));
+
+    const after = await verifyDecisionLog(path);
+    expect(after.ok).toBe(true); // the walk cannot see it — that is the point
+    expect(unwrap(after, "after").chain.headHash).not.toBe(head);
+
+    // So the report must not present this as a clean bill of health.
+    const report = formatVerification(path, unwrap(after, "after"));
+    expect(report).toContain("tail unwitnessed");
+    expect(report).toContain("Whether the LAST record is genuine");
+  });
+
+  it("catches an edited final record once the head is pinned", async () => {
+    await writeDemoLog();
+    const head = unwrap(await verifyDecisionLog(path), "before").chain.headHash;
+
+    await editLine(4, (line) => line.replace('"ETHUSDT"', '"BTCUSDT"'));
+
+    const result = await verifyDecisionLog(path, { expectedHead: head });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("does not match the head you pinned");
+  });
+
+  it("catches a correctly-chained append once the head is pinned", async () => {
+    await writeDemoLog();
+    const head = unwrap(await verifyDecisionLog(path), "before").chain.headHash;
+
+    // Append the way someone who read the format would: real seq, real prevHash.
+    const log = unwrap(await DecisionLog.open(path), "reopen");
+    await log.appendWith((seq) =>
+      ok({
+        ts: "2026-09-06T12:00:00.000Z",
+        mandateHash: MANDATE,
+        intent: INTENT,
+        outcome: "ALLOW" as const,
+        clientOrderId: unwrap(mintClientOrderId(SECRET, MANDATE, seq), "mint"),
+      }),
+    );
+    await log.close();
+
+    // A chain walk accepts it, because it is a valid chain.
+    expect((await verifyDecisionLog(path)).ok).toBe(true);
+    // A pinned head does not.
+    const pinned = await verifyDecisionLog(path, { expectedHead: head });
+    expect(pinned.ok).toBe(false);
+  });
+
+  it("accepts a matching head, and says the history was committed to", async () => {
+    await writeDemoLog();
+    const head = unwrap(await verifyDecisionLog(path), "first").chain.headHash;
+
+    const result = await verifyDecisionLog(path, { expectedHead: head });
+    expect(result.ok).toBe(true);
+    expect(unwrap(result, "pinned").headPinned).toBe(true);
+
+    const report = formatVerification(path, unwrap(result, "pinned"));
+    expect(report).toContain("pinned head         MATCHES");
+    expect(report).not.toContain("tail unwitnessed");
+    expect(report).not.toContain("Whether the LAST record is genuine");
+  });
+
+  it("ignores surrounding whitespace and case in a pinned head", async () => {
+    // People paste this out of a video frame or a README.
+    await writeDemoLog();
+    const head = unwrap(await verifyDecisionLog(path), "first").chain.headHash;
+    const result = await verifyDecisionLog(path, { expectedHead: `  ${head.toUpperCase()}  ` });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not overstate what an authentic tag covers", async () => {
+    // The tag is an HMAC over mandateHash|seq. It says nothing about symbol or size.
+    await writeDemoLog();
+    const result = await verifyDecisionLog(path, { hmacSecret: SECRET });
+    const report = formatVerification(path, unwrap(result, "tags"));
+    expect(report).toContain("not");
+    expect(report).toContain("symbol, side, quantity or price");
+  });
+});
+
 describe("a log whose rules changed mid-run", () => {
   it("names every mandate cited instead of reporting one", async () => {
     // The chain can be intact while the ruleset was swapped underneath it. That is not

@@ -22,6 +22,20 @@
  * id is authentic. That verification needs the key, and the key is the operator's. Pass
  * `--secret` if you hold it. Otherwise the report says the tags were not verified,
  * rather than quietly implying they were.
+ *
+ * **What a hash chain cannot do at all, and why `--head` exists.** The chain hash is
+ * unkeyed, so anyone can compute it. Walking the chain proves every record agrees with
+ * the one after it — which pins every record except the last, because nothing follows
+ * the last one to disagree with it. Two edits therefore survive a chain walk: changing
+ * the final record, and appending a new record with a correctly computed `prevHash`.
+ * Both are exactly what faking a demo would look like, so neither may be reported as
+ * verified.
+ *
+ * The fix does not need a secret, only an out-of-band commitment. The head hash is a
+ * commitment to the entire history: publish it — say it in the video, put it in a
+ * README, post it — and pass it back as `--head`. Any edit anywhere, tail included,
+ * moves the head and fails the check. Without `--head`, the report says the tail is
+ * unwitnessed instead of calling the log verified.
  */
 
 import { createInterface } from "node:readline";
@@ -52,11 +66,20 @@ export interface LogSummary {
    * reader to assume one way or the other.
    */
   readonly tags?: { readonly authentic: number; readonly rejected: readonly string[] };
+  /** True when the caller pinned the head and it matched. Absent means no head was given. */
+  readonly headPinned?: boolean;
 }
 
 export interface VerifyOptions {
   /** HMAC secret, if the caller holds it. Enables client-order-id tag verification. */
   readonly hmacSecret?: string;
+  /**
+   * A head hash published out of band, to pin the history against.
+   *
+   * This is what closes the tail gap. Without it the chain cannot distinguish an
+   * honest final record from an edited one, or an appended record from a real one.
+   */
+  readonly expectedHead?: string;
 }
 
 /**
@@ -72,6 +95,22 @@ export async function verifyDecisionLog(
 ): Promise<Result<LogSummary, BondedError>> {
   const chain = await verifyChain(path);
   if (!chain.ok) return chain;
+
+  // Before anything else. A pinned head that does not match means the history in this
+  // file is not the history that was committed to, and nothing below it is worth
+  // reporting as a finding about that history.
+  if (options.expectedHead !== undefined) {
+    const expected = options.expectedHead.trim().toLowerCase();
+    if (expected !== chain.value.headHash) {
+      return err(
+        bondedError(
+          ErrorCode.DECISION_LOG_CORRUPT,
+          "decision log head does not match the head you pinned",
+          { path, expectedHead: expected, actualHead: chain.value.headHash },
+        ),
+      );
+    }
+  }
 
   let allowed = 0;
   let denied = 0;
@@ -152,6 +191,7 @@ export async function verifyDecisionLog(
     lastTs,
     clientOrderIds,
     ...(options.hmacSecret === undefined ? {} : { tags: { authentic, rejected } }),
+    ...(options.expectedHead === undefined ? {} : { headPinned: true }),
   });
 }
 
@@ -164,10 +204,14 @@ export function formatVerification(path: string, summary: LogSummary): string {
   say();
   say("  VERIFIED");
   say(
-    `    hash chain          intact from genesis across ${String(summary.chain.recordCount)} records`,
+    `    hash chain          intact from genesis across ${String(summary.chain.recordCount)} records` +
+      (summary.headPinned === true ? "" : " (tail unwitnessed - see below)"),
   );
   say(`    sequence            contiguous, 0 to ${String(summary.chain.nextSeq - 1)}`);
   say(`    head                ${summary.chain.headHash}`);
+  if (summary.headPinned === true) {
+    say("    pinned head         MATCHES — this is the history that was committed to");
+  }
   say(
     summary.mandateHashes.length === 1
       ? `    mandate             ${summary.mandateHashes[0] ?? ""} — one ruleset throughout`
@@ -198,9 +242,24 @@ export function formatVerification(path: string, summary: LogSummary): string {
 
   say();
   say("  NOT VERIFIED BY THIS COMMAND");
+  if (summary.headPinned !== true) {
+    // The chain pins every record against the one after it, so the last record is
+    // pinned by nothing. Saying "verified" without saying this would be the exact
+    // overclaim this command exists to refuse.
+    say("    Whether the LAST record is genuine, or whether records were appended. The");
+    say("    chain hash is unkeyed, so anyone can extend it: a chain walk pins every");
+    say("    record against the next one, and nothing follows the last one. Re-run with");
+    say(`      --head ${summary.chain.headHash}`);
+    say("    against a head the operator published beforehand — in the video, a README,");
+    say("    anywhere public. Any edit at all moves the head, tail included.");
+  }
   if (summary.tags === undefined) {
     say("    Whether each stamped client order id is authentic. That needs the HMAC");
     say("    secret, which belongs to the operator. Pass --secret if you hold it.");
+  } else {
+    say("    What an authentic tag covers: the mandate hash and the sequence number, not");
+    say("    the order's symbol, side, quantity or price. A valid tag says this decision");
+    say("    was minted by the key holder under that ruleset, not what it asked for.");
   }
   say("    Whether these orders reached the exchange, and what they did there. Check");
   say("    the ids below against Binance yourself — that is the point of listing them.");

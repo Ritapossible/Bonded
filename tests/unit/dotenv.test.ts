@@ -8,7 +8,8 @@
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dotenvCandidates, loadDotenv, parseDotenv } from "../../src/config/dotenv.js";
 
@@ -119,9 +120,17 @@ describe("loadDotenv", () => {
 
   it("looks beside the installation as well as in the working directory", () => {
     // An MCP server is launched by the agent, often from a GUI with an arbitrary cwd.
+    //
+    // The expected second candidate is derived here from this test file's own location
+    // rather than from the checkout's name. Asserting on a literal "/bonded/.env" passed
+    // only because this working copy happens to sit in a directory called `bonded`, and
+    // went red for anyone who cloned into `Bonded` — as the README's own clone command
+    // tells them to — or into any other name.
+    const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
     const candidates = dotenvCandidates("/some/other/place");
     expect(candidates[0]).toBe("/some/other/place/.env");
     expect(candidates.length).toBeGreaterThan(1);
-    expect(candidates.some((path) => path.endsWith("/bonded/.env"))).toBe(true);
+    expect(candidates).toContain(join(packageRoot, ".env"));
   });
 });

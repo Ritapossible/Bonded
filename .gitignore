@@ -15,4 +15,6 @@ profiles/
 # runtime state
 data/
 *.jsonl
+# except the published sample, which exists so the verifier can be tried offline
+!examples/sample-decisions.jsonl
 dist-site/
