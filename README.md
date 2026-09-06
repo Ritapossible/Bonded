@@ -167,7 +167,7 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Realised PnL from trade history — the figure the loss limits bind on | done |
 | Hash-chained decision log with tamper detection | done |
 | Binance Spot REST client — signing, timeouts, bounded retries | done |
-| MCP server — `place_order`, `check_order`, `get_mandate_summary`, `get_account` | done |
+| MCP server — `place_order`, `check_order`, `cancel_order`, `get_mandate_summary`, `get_account` | done |
 | Boot guards + startup banner | done |
 | **Reconciler — authorisation index, classification, bond burn** | **done** |
 | Order sources — polling backstop + user data stream | done |
