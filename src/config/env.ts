@@ -87,6 +87,15 @@ const EnvSchema = z.object({
           .every((symbol) => /^[A-Za-z0-9]{2,20}$/.test(symbol)),
       "must be a comma-separated list of Binance symbols",
     ),
+  /**
+   * Where reference prices come from.
+   *
+   * `rest` is BONDED's own signed client. `binance-cli` shells out to Binance's official
+   * Agent OS tooling, which speaks the same environment variables and supports testnet.
+   * REST is the default because it has the fewest moving parts; the CLI is the Agent OS
+   * path, and a source that spawns a process can fail in ways a fetch cannot.
+   */
+  BONDED_PRICE_SOURCE: z.enum(["rest", "binance-cli"]).default("rest"),
   BONDED_HMAC_SECRET: z
     .string()
     .min(32, "must be at least 32 characters; generate with `openssl rand -hex 32`"),
@@ -114,6 +123,8 @@ export interface Config {
   readonly allowPartialAudit: boolean;
   /** Extra symbols the polling backstop watches, beyond the mandate's own. */
   readonly watchSymbols: readonly string[];
+  /** Where reference prices come from: BONDED's REST client, or Binance's own CLI. */
+  readonly priceSource: "rest" | "binance-cli";
   readonly hmacSecret: Secret;
   readonly mandatePath: string;
   readonly decisionLogPath: string;
@@ -158,6 +169,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Result<Conf
     watchSymbols: env.BONDED_WATCH_SYMBOLS.split(",")
       .map((symbol) => symbol.trim().toUpperCase())
       .filter((symbol) => symbol !== ""),
+    priceSource: env.BONDED_PRICE_SOURCE,
     hmacSecret: new Secret(env.BONDED_HMAC_SECRET),
     mandatePath: env.BONDED_MANDATE_PATH,
     decisionLogPath: env.BONDED_DECISION_LOG_PATH,
@@ -176,6 +188,7 @@ export function describeConfig(config: Config): Record<string, unknown> {
     allowProd: config.allowProd,
     allowPartialAudit: config.allowPartialAudit,
     watchSymbols: config.watchSymbols,
+    priceSource: config.priceSource,
     mandatePath: config.mandatePath,
     decisionLogPath: config.decisionLogPath,
     logLevel: config.logLevel,

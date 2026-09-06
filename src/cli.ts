@@ -18,6 +18,7 @@ import { isAuditPathAdequate, resolveStartupCoverage } from "./reconcile/audit-p
 import { readFile } from "node:fs/promises";
 import { DecisionLog } from "./audit/decision-log.js";
 import { BinanceClient } from "./binance/client.js";
+import { BinanceCliPriceSource } from "./binance/cli-price-source.js";
 import { anyGuardFailed, formatGuardBanner, runBootGuards } from "./boot/guards.js";
 import { loadDotenv } from "./config/dotenv.js";
 import { describeConfig, loadConfig } from "./config/env.js";
@@ -137,8 +138,16 @@ async function main(): Promise<number> {
     return 1;
   }
 
+  // Reference prices can come from Binance's own Agent OS CLI instead of BONDED's
+  // REST client. Opt-in, because a source that spawns a process has failure modes a
+  // fetch does not; the banner below names whichever is live so it is never a guess.
+  const priceSource =
+    config.value.priceSource === "binance-cli" ? new BinanceCliPriceSource() : client;
+  logger.info({ priceSource: priceSource.name }, "reference price source");
+
   const stateProvider = new StateProvider({
     client,
+    priceSource,
     clock: systemClock,
     symbols: mandate.spec.symbols,
   });

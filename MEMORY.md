@@ -104,6 +104,20 @@ chat." **No confirmation step, no sub-account isolation, no withdrawal fence.**
 **This asymmetry is the entire product thesis.** Binance guarded the attended path and left the
 unattended one open — and the unattended one is what agent frameworks actually use.
 
+### The hosted MCP server cannot be called by an unattended process
+
+Probed 2026-09-06. `POST https://agent.binance.com/mcp/agentic` answers **401** to an
+unauthenticated `initialize`. So "Market data: public, no auth" describes the *scope* — it
+needs no account permission — not the *transport*, which still sits behind the interactive
+OAuth consent, desktop browser only. Combined with "no testnet", that rules the hosted
+server out as a runtime dependency for anything unattended.
+
+**Do not re-attempt an MCP-client integration against it.** The composition is real but it
+happens one level up: the agent registers both servers, Binance's for market data and
+BONDED for orders. Where BONDED itself needs Agent OS tooling in-process, the answer is
+`binance-cli` — official, testnet-capable, no OAuth, and it reads the same environment
+variables BONDED already takes.
+
 ### Agentic Wallet — mainnet only
 
 [Docs](https://developers.binance.com/en/docs/products/agentic-wallet/welcome): BSC 56,
@@ -305,7 +319,7 @@ missed.
 | 1 | Does `GET /sapi/v1/account/apiRestrictions` exist on Spot Testnet? | Boot guard 2's strength | **Handled** — the guard degrades to `WARN` on testnet and states what it checked instead. Verify on mainnet if that path is ever used |
 | 2 | What is `BINANCE_API_ENV=demo`? | Possibly a better demo surface | Open — undocumented |
 | 3 | Do user data streams work on Spot Testnet? | The reconciler | **Resolved — yes** (§2) |
-| 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | **Decided — direct REST.** The gate needs to control the exact query string it signs and to stamp `newClientOrderId` per order; shelling out to a CLI puts a process boundary in the hot path for no gain. `binance-cli` stays the documented way to *demonstrate a bypass* |
+| 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | **Re-decided — both, split by direction.** Direct REST for *writes*, for the original reason: the gate must control the exact query string it signs and stamp `newClientOrderId` per order. That reasoning never applied to *reads*, and deciding it once for the whole client quietly reinstated the sponsor-alignment risk the dead-ends table warns about. `@binance/binance-cli` is now a dependency and backs the reference-price read under `BONDED_PRICE_SOURCE=binance-cli` |
 | 6 | Live testnet round trip | The demo | **Blocked in the cloud sandbox** (geo-block, §2). Must be run locally |
 | 8 | Will the hub accept a skill that is not a Binance-operated service? | Distribution | Open — every current skill is first-party. Worth opening the PR regardless; a rejection costs nothing and the repo link stands on its own |
 | 7 | Does the listen-key flow work on Spot Testnet with HMAC keys? | Real-time detection | **Untested** — geo-blocked here. The polling backstop covers the audit path either way, so a failure degrades the demo from instant to ~15s rather than breaking it. **Verify locally first** |

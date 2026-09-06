@@ -75,6 +75,21 @@ wrong environment, expired mandate, broken audit chain, clock skew, or no readab
 history. A guard that cannot perform its check reports `WARN` and says what it checked
 instead; it never claims a check it did not make.
 
+### Reference prices through Binance's own CLI
+
+`@binance/binance-cli` is a runtime dependency, and reference prices can be read through
+it rather than through BONDED's REST client:
+
+```bash
+export BONDED_PRICE_SOURCE=binance-cli
+```
+
+It takes the same environment variables BONDED already reads, supports testnet, and needs
+no extra credential. Orders are always signed by BONDED itself — the gate has to control
+the exact query string it signs and stamp an unforgeable `clientOrderId` on every order,
+so the write path never leaves the process. Reads have no such constraint. Either source
+fails closed: an unavailable price denies the order rather than sizing it against a guess.
+
 ### Alongside Binance's own MCP server
 
 BONDED does not replace Binance's MCP server; it sits next to it. Register both and the

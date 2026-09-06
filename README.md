@@ -27,6 +27,29 @@ uses, because it is the one that runs unattended.
 
 BONDED guards that one.
 
+## Built on Agent OS
+
+Every surface below is one Agent OS ships. What is real, and checkable:
+
+| Agent OS surface | How BONDED uses it |
+| --- | --- |
+| **Skills Hub** | BONDED is packaged as an Agent OS skill — [`SKILL.md`](./SKILL.md) at the repository root, with the submission prepared in [`contrib/binance-skills-hub/`](./contrib/binance-skills-hub) |
+| **`@binance/binance-cli`** | A runtime dependency, in `package.json`. Reference prices can be read through Binance's own CLI: set `BONDED_PRICE_SOURCE=binance-cli` |
+| **MCP** | BONDED *is* an MCP server, over stdio, so any MCP client can hold it |
+| **Binance MCP server** | Runs alongside it — Binance's server for market data, BONDED for orders. See [Connecting an agent](#running-it) |
+
+And what it deliberately does **not** do: orders are signed by BONDED itself, against Spot
+REST, not shelled out to the CLI. The gate has to control the exact query string it signs
+and stamp an unforgeable `clientOrderId` on every order, so putting a process boundary in
+the signing path would cost the guarantee and buy nothing. That reasoning is about the
+write path; reads have no such constraint, which is why the price source can be the CLI.
+
+One honest note on Binance's hosted MCP server, recorded so nobody repeats the
+experiment: it answers `401` to an unauthenticated `initialize`, so the "market data needs
+no auth" scope still sits behind an interactive OAuth consent, and it has no testnet. An
+unattended server cannot complete a browser consent flow, so BONDED composes with it at
+the agent's level — both servers registered side by side — rather than calling it.
+
 ## What it does
 
 1. **Holds the credential.** The agent talks to BONDED's MCP server, never to Binance. It has
@@ -174,7 +197,7 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Owner console — one screen, live over SSE | done |
 | Public API entry point, CI, process-level failure handling | done |
 
-289 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+301 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -314,6 +337,16 @@ export BINANCE_SPOT_BASE_PATH=https://testnet.binance.vision
 
 Testnet API keys: https://testnet.binance.vision/
 
+To read reference prices through Binance's own Agent OS CLI instead of BONDED's REST
+client — same variables, same testnet, no extra credential:
+
+```bash
+export BONDED_PRICE_SOURCE=binance-cli
+```
+
+The boot log names whichever source is live, so it is never a guess. Either way it fails
+closed: an unavailable price denies the order rather than sizing it against a guess.
+
 ### Running it
 
 ```bash
@@ -376,7 +409,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 289 tests, ~2s
+npm test           # 301 tests, ~2s
 ```
 
 ## Licence

@@ -74,6 +74,8 @@ interface RequestOptions {
 const RETRYABLE_STATUS = new Set([408, 429, 418, 500, 502, 503, 504]);
 
 export class BinanceClient {
+  /** Satisfies `PriceSource`, so this client is the default reference-price source. */
+  readonly name = "rest";
   readonly #baseUrl: string;
   readonly #apiKey: Secret;
   readonly #secretKey: Secret;

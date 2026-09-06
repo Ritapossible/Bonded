@@ -46,6 +46,7 @@ function config(overrides: Partial<Config["binance"]> = {}, allowProd = false): 
     allowProd,
     allowPartialAudit: false,
     watchSymbols: [],
+    priceSource: "rest",
     hmacSecret: new Secret("0".repeat(64)),
     mandatePath: "/tmp/does-not-exist/mandate.json",
     decisionLogPath: "/tmp/does-not-exist/decisions.jsonl",

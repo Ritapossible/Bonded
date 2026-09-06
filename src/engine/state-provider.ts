@@ -11,6 +11,7 @@
  */
 
 import type { BinanceClient } from "../binance/client.js";
+import type { PriceSource } from "../binance/cli-price-source.js";
 import {
   parseAccount,
   parseExchangeInfo,
@@ -69,6 +70,11 @@ interface Cached<T> {
 
 export interface StateProviderOptions {
   readonly client: BinanceClient;
+  /**
+   * Where reference prices come from. Defaults to `client`, which already satisfies the
+   * interface; `binance-cli` swaps in Binance's own Agent OS tooling for this one read.
+   */
+  readonly priceSource?: PriceSource;
   readonly clock: Clock;
   /** Symbols to keep priced. Taken from the mandate's allowlist. */
   readonly symbols: readonly string[];
@@ -76,6 +82,7 @@ export interface StateProviderOptions {
 
 export class StateProvider {
   readonly #client: BinanceClient;
+  readonly #priceSource: PriceSource;
   readonly #clock: Clock;
   readonly #symbols: readonly string[];
 
@@ -101,6 +108,7 @@ export class StateProvider {
 
   constructor(options: StateProviderOptions) {
     this.#client = options.client;
+    this.#priceSource = options.priceSource ?? options.client;
     this.#clock = options.clock;
     this.#symbols = options.symbols;
   }
@@ -199,7 +207,7 @@ export class StateProvider {
         this.#prices = { observedAtMs: this.#clock.now(), value: new Map() };
         return ok(undefined);
       }
-      const raw = await this.#client.tickerPrice(this.#symbols);
+      const raw = await this.#priceSource.tickerPrice(this.#symbols);
       if (!raw.ok) return raw;
       const observedAtMs = this.#clock.now();
       const parsed = parseTickerPrices(raw.value, observedAtMs);
