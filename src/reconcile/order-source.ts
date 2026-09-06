@@ -344,7 +344,12 @@ export class UserDataStreamSource implements OrderSource {
         this.#unavailableReason =
           "Binance removed POST /api/v3/userDataStream (410 Gone) in February 2026. " +
           "Real-time execution reports are unavailable; polling is the only order source.";
-        this.#logger.error(
+        // warn, not error. This is a known, handled, permanently-true condition that
+        // the boot banner already reports and that the audit-coverage guard already
+        // decides on. Logging it at error level makes a correct startup look broken —
+        // and a red line that always means "expected" teaches operators to skim past
+        // the ones that do not.
+        this.#logger.warn(
           { error: listenKey.error.toJSON() },
           "user data stream endpoint has been removed by Binance; not retrying",
         );
