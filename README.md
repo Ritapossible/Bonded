@@ -106,6 +106,32 @@ The gate can prove an order was inside the mandate. It has no opinion on whether
 was sensible, and it cannot acquire one. An agent that loses money strictly within its
 limits is a mandate problem, not a BONDED problem.
 
+### Why this runs on testnet, deliberately
+
+Not a limitation worked around — a choice, and it would be the same choice with more time.
+
+**The demo places an order that defeats a safety control.** That is the whole argument:
+an order goes around BONDED, fills, and is caught. On mainnet that is real money being
+deliberately misused on camera, repeatedly, across takes. A security tool whose
+demonstration requires misusing a funded account has not thought about what it is asking
+its audience to do.
+
+The code enforces this rather than trusting the operator to remember it. BONDED refuses
+to start against production unless `BONDED_ALLOW_PROD=1` is set explicitly, and the two
+scripts that exist to defeat it — `scripts/bypass-order.mjs` and `scripts/redteam.mjs` —
+refuse production **with no override at all**.
+
+It also happens to be the only place the argument can be made. Binance's hosted MCP
+server has no testnet: it trades a funded Agentic sub-account on mainnet, over OAuth,
+with a human confirming every trade. That path is already guarded, and BONDED has
+nothing to add to it. The path BONDED does guard — raw API keys, no confirmation, which
+is what an unattended agent runs on — is the one that has a testnet. `binance-cli`,
+Binance's own Agent OS tooling and now a dependency here, supports `testnet` alongside
+`prod` and `demo` for exactly this reason.
+
+What testnet costs is listed honestly below: the withdrawal guard cannot run there, and
+fills are simulated.
+
 ### The withdrawal guarantee is not verified on testnet
 
 BONDED does not implement a withdrawal guard — it verifies the exchange enforces one, which

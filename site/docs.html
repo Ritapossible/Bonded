@@ -1017,12 +1017,40 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
           means.
         </p>
 
-        <div class="note note--warn">
+        <h3>Why this runs on testnet, deliberately</h3>
+        <p>
+          Not a limitation worked around - a choice, and it would be the same choice with more time.
+          The demo places an order that <em>defeats a safety control</em>. That is the whole
+          argument: an order goes around BONDED, fills, and is caught. On mainnet that is real money
+          being deliberately misused on camera, repeatedly, across takes. A security tool whose
+          demonstration requires misusing a funded account has not thought about what it is asking
+          its audience to do.
+        </p>
+        <p>
+          The code enforces this rather than trusting the operator to remember. BONDED refuses to
+          start against production unless <code>BONDED_ALLOW_PROD=1</code> is set explicitly, and
+          the two scripts that exist to defeat it - <code>scripts/bypass-order.mjs</code> and
+          <code>scripts/redteam.mjs</code> - refuse production
+          <strong>with no override at all</strong>.
+        </p>
+        <p>
+          It is also the only place the argument can be made. Binance's hosted MCP server has no
+          testnet: it trades a funded Agentic sub-account on mainnet, over OAuth, with a human
+          confirming every trade. That path is already guarded. The path BONDED guards - raw API
+          keys, no confirmation, what an unattended agent actually runs on - is the one with a
+          testnet, and <code>binance-cli</code> supports <code>testnet</code> alongside
+          <code>prod</code> and <code>demo</code> for exactly that reason.
+        </p>
+
+        <div class="note">
           <p>
-            <strong>The live testnet round trip has not been run.</strong> Development took place in
-            an environment Binance geo-blocks, so signing, order placement and the user data stream
-            are covered by tests against a stubbed exchange rather than a real one. The listen-key
-            flow in particular is unverified.
+            <strong>What has and has not been run live.</strong> The boot path has been run against
+            Spot Testnet from a real machine: environment, mandate, clock skew, symbol grounding
+            against live <code>exchangeInfo</code>, decision-log chain and audit path all pass, the
+            console serves, and the MCP server connects. That run is also what found the removed
+            listen-key endpoint and a clock-skew guard whose symmetric limit passed a clock Binance
+            rejects. Signing and order placement remain covered by tests against a stubbed exchange
+            rather than a real one.
           </p>
         </div>
 
