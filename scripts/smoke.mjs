@@ -81,8 +81,8 @@ try {
   say("\n  MANDATE");
   const summary = await call("get_mandate_summary", {});
   check(
-    "summary returns clause names",
-    Array.isArray(summary.clauses) && summary.clauses.length > 0,
+    "summary returns all nineteen clause names",
+    Array.isArray(summary.clauses) && summary.clauses.length === 19,
     `${String(summary.clauses?.length ?? 0)} clauses, mandate ${String(summary.mandateHash ?? "?").slice(0, 8)}`,
   );
   check(
@@ -101,7 +101,11 @@ try {
   });
   check(
     "an order far above the cap is refused",
-    oversized.status === "DENIED",
+    // `check_order` answers WOULD_ALLOW / WOULD_DENY, deliberately: it is a question
+    // about a hypothetical order, not a report on one that was submitted. Asserting
+    // "DENIED" here was this script's own bug, and it failed against a gate that was
+    // behaving exactly as designed.
+    oversized.status === "WOULD_DENY",
     `${String(oversized.status)}${oversized.clause ? ` ${String(oversized.clause)}` : ""}` +
       `${oversized.observed ? ` — observed ${String(oversized.observed)}, limit ${String(oversized.limit ?? "?")}` : ""}`,
   );
@@ -115,7 +119,7 @@ try {
   });
   check(
     "a symbol outside the mandate is refused",
-    foreign.status === "DENIED",
+    foreign.status === "WOULD_DENY",
     `${String(foreign.status)}${foreign.clause ? ` ${String(foreign.clause)}` : ""}`,
   );
 
