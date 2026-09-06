@@ -188,6 +188,53 @@ describe("the clock skew guard", () => {
     });
     expect(result.status).toBe("FAIL");
   });
+
+  /**
+   * Binance's admission rule is asymmetric:
+   *
+   *     timestamp < (serverTime + 1000) && (serverTime - timestamp) <= recvWindow
+   *
+   * A single `Math.abs(skew) > 2000` treated both directions alike, so a clock ~1.7s
+   * AHEAD passed the guard — and then every signed request came back `-1021 Timestamp
+   * for this request is outside of the recvWindow`. Found by running it, not reading it.
+   */
+  it("fails a clock that is ahead by less than the old symmetric limit", async () => {
+    // Local ahead of the exchange by ~1.7s: `Math.abs(skew) > 2000` was false, so this
+    // used to PASS. Binance rejects it, because being ahead is capped at 1000 ms and
+    // recvWindow cannot widen that.
+    const result = await guard("clockSkew", {
+      config: config(),
+      client: client({ serverTimeMs: Date.now() - 1_700 }),
+      mandate,
+      nowMs: NOW,
+    });
+    expect(result.status).toBe("FAIL");
+    expect(result.detail).toContain("AHEAD");
+    expect(result.detail).toContain("1000 ms");
+  });
+
+  it("still allows the same distance behind, which the exchange tolerates", async () => {
+    // The asymmetry is the point: recvWindow covers being behind, nothing covers being
+    // ahead. Failing both alike would reject a clock the exchange is happy with.
+    const result = await guard("clockSkew", {
+      config: config(),
+      client: client({ serverTimeMs: Date.now() + 1_700 }),
+      mandate,
+      nowMs: NOW,
+    });
+    expect(result.status).toBe("PASS");
+    expect(result.detail).toContain("behind");
+  });
+
+  it("names the direction, so the fix is obvious from the banner", async () => {
+    const behind = await guard("clockSkew", {
+      config: config(),
+      client: client({ serverTimeMs: Date.now() + 30_000 }),
+      mandate,
+      nowMs: NOW,
+    });
+    expect(behind.detail).toContain("BEHIND");
+  });
 });
 
 describe("the withdrawal guard", () => {

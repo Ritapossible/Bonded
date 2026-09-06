@@ -220,7 +220,7 @@ revoke — is covered by an integration test against a stubbed exchange.
 | Owner console — one screen, live over SSE | done |
 | Public API entry point, CI, process-level failure handling | done |
 
-306 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+310 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -468,7 +468,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 306 tests, ~2s
+npm test           # 310 tests, ~2s
 ```
 
 ## Licence

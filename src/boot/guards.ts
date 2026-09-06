@@ -34,8 +34,29 @@ export interface GuardContext {
   readonly nowMs: number;
 }
 
-/** Maximum tolerated skew against Binance's clock before signatures start failing. */
-const MAX_CLOCK_SKEW_MS = 2_000;
+/**
+ * Tolerated clock skew, and why it is not one number.
+ *
+ * Binance's own admission rule is asymmetric:
+ *
+ *     timestamp < (serverTime + 1000) && (serverTime - timestamp) <= recvWindow
+ *
+ * So a request may be sent from a clock up to `recvWindow` **behind** the exchange, but
+ * no more than **1000 ms ahead** of it — being ahead is rejected on a fixed 1-second
+ * allowance that `recvWindow` cannot widen.
+ *
+ * This guard used a single symmetric `Math.abs(skew) > 2000`, which passed a clock
+ * roughly 1.7 seconds ahead and then watched every signed request come back
+ * `-1021 Timestamp for this request is outside of the recvWindow`. A guard that passes
+ * a configuration the exchange rejects is worse than no guard: it moves the failure to
+ * the first order and tells the operator the clock was fine.
+ *
+ * Both limits sit inside Binance's, because the check happens once at boot and the
+ * clock keeps drifting afterwards. Half of the 1000 ms allowance is left as headroom
+ * for that drift plus the latency of the request being signed.
+ */
+const MAX_CLOCK_AHEAD_MS = 500;
+const MAX_CLOCK_BEHIND_MS = 2_000;
 
 /**
  * Guard 1 — environment.
@@ -223,17 +244,30 @@ async function guardClockSkew(ctx: GuardContext): Promise<GuardResult> {
     };
   }
 
-  if (Math.abs(skew) > MAX_CLOCK_SKEW_MS) {
+  // skew = serverTime - localTime, so a NEGATIVE skew means the local clock is ahead.
+  if (skew < -MAX_CLOCK_AHEAD_MS) {
     return {
       name: "clockSkew",
       status: "FAIL",
-      detail: `local clock differs from the exchange by ${String(skew)} ms (limit ${String(MAX_CLOCK_SKEW_MS)} ms)`,
+      detail:
+        `local clock is ${String(-skew)} ms AHEAD of the exchange (limit ${String(MAX_CLOCK_AHEAD_MS)} ms). ` +
+        "Binance rejects any signed request timestamped more than 1000 ms ahead of its " +
+        "own clock, and recvWindow does not widen that. Sync the system clock.",
+    };
+  }
+  if (skew > MAX_CLOCK_BEHIND_MS) {
+    return {
+      name: "clockSkew",
+      status: "FAIL",
+      detail:
+        `local clock is ${String(skew)} ms BEHIND the exchange (limit ${String(MAX_CLOCK_BEHIND_MS)} ms). ` +
+        "Sync the system clock.",
     };
   }
   return {
     name: "clockSkew",
     status: "PASS",
-    detail: `clock within ${String(skew)} ms of exchange`,
+    detail: `clock within ${String(skew)} ms of exchange (${skew < 0 ? "ahead" : "behind"})`,
   };
 }
 

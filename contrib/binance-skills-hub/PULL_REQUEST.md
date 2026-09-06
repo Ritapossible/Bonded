@@ -10,7 +10,7 @@ stamped client order id, or `DENIED` naming the exact mandate clause it breached
 The skill does not decide what to trade. It produces no signals, strategies or
 recommendations; it enforces limits an owner wrote and reports what it refused and why.
 
-Source: <https://github.com/Ritapossible/Bonded> — MIT, 306 tests, typecheck and lint clean.
+Source: <https://github.com/Ritapossible/Bonded> — MIT, 310 tests, typecheck and lint clean.
 
 # APIs Used
 
