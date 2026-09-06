@@ -40,6 +40,13 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { verifyDecisionLog } from "../dist/verify/verify-log.js";
+import { loadDotenv } from "../dist/config/dotenv.js";
+
+// Read `.env` as BONDED does, before anything looks at process.env. The documented
+// setup puts the credentials there, so without this the script refuses to start for
+// exactly the people who followed the instructions. It also fixes the child: the
+// BONDED it spawns inherits this process's environment.
+loadDotenv();
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TESTNET = "https://testnet.binance.vision";

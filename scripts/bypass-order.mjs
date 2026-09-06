@@ -16,6 +16,13 @@
  *   node scripts/bypass-order.mjs BTCUSDT BUY 0.001
  */
 import { createHmac } from "node:crypto";
+import { loadDotenv } from "../dist/config/dotenv.js";
+
+// Read `.env` exactly as BONDED does. The documented setup puts the keys there and
+// nowhere else, so a script that only reads the shell environment refuses to run for
+// anyone who followed the instructions — and this one is beat 3 of the demo, so it
+// would refuse on camera. The real environment still wins over the file.
+loadDotenv();
 
 const TESTNET = "https://testnet.binance.vision";
 
