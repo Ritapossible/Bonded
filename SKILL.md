@@ -45,7 +45,8 @@ Repository: <https://github.com/Ritapossible/Bonded>
 
 ## Setup
 
-Node 22+. Binance **Spot Testnet** keys from <https://testnet.binance.vision>.
+Node **22.13+** — `@binance/binance-cli` pulls a dependency that requires it. Binance
+**Spot Testnet** keys from <https://testnet.binance.vision>.
 
 ```bash
 git clone https://github.com/Ritapossible/Bonded && cd Bonded
@@ -56,6 +57,19 @@ openssl rand -hex 32      # -> BONDED_HMAC_SECRET
 mkdir -p data
 cp examples/mandate.example.json data/mandate.json
 ```
+
+On Windows PowerShell the equivalents differ — `mkdir` takes no `-p`, there is no
+`openssl`, and `cp` is `Copy-Item`:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env    # paste the keys, then save
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+New-Item -ItemType Directory -Force data | Out-Null
+Copy-Item examples/mandate.example.json data/mandate.json
+```
+
+`.env` is a file to edit, not a command to run.
 
 Register the MCP server with your agent. BONDED speaks MCP over stdio, so any MCP client
 works — Claude Code, Codex CLI, Claude Desktop, Cursor, Windsurf, VS Code:

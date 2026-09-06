@@ -349,6 +349,11 @@ closed: an unavailable price denies the order rather than sizing it against a gu
 
 ### Running it
 
+Node **22.13 or later** — `@binance/binance-cli` pulls a dependency that requires it, and
+22.12 installs with `EBADENGINE` warnings.
+
+macOS and Linux:
+
 ```bash
 npm install
 npm run build
@@ -359,6 +364,34 @@ mkdir -p data
 cp examples/mandate.example.json data/mandate.json
 
 npm start
+```
+
+Windows PowerShell. Not a translation of the above so much as a different set of commands:
+`mkdir` takes no `-p`, there is no `openssl`, and `cp` is `Copy-Item`, which copies files
+rather than setting variables.
+
+```powershell
+npm install
+npm run build
+
+Copy-Item .env.example .env
+notepad .env    # paste the two keys and the secret below, then save
+
+# Generates BONDED_HMAC_SECRET, since Windows has no openssl:
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+New-Item -ItemType Directory -Force data | Out-Null
+Copy-Item examples/mandate.example.json data/mandate.json
+
+npm start
+```
+
+`.env` is a file you **edit**, not a command you run. Open it and fill in three lines:
+
+```
+BINANCE_API_KEY=<from testnet.binance.vision>
+BINANCE_SECRET_KEY=<from testnet.binance.vision>
+BONDED_HMAC_SECRET=<the 64 hex characters generated above>
 ```
 
 Startup prints a guard banner to **stderr** (stdout is the MCP channel) and refuses to

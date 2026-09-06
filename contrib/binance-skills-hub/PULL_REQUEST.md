@@ -40,10 +40,17 @@ WebSocket: `wss://stream.testnet.binance.vision/ws/<listenKey>` for `executionRe
 
 # Binaries Used
 
-- **node** (>= 22) — the only runtime dependency. The skill runs an MCP server over stdio.
+- **node** (>= 22.13) — the runtime. The skill runs an MCP server over stdio.
 
-No system binaries, no root, no shell-outs. Runtime dependencies are four packages:
-`@modelcontextprotocol/sdk`, `zod`, `decimal.js`, `pino`.
+No system binaries and no root. Runtime dependencies are five packages:
+`@binance/binance-cli`, `@modelcontextprotocol/sdk`, `zod`, `decimal.js`, `pino`.
+
+The one subprocess is optional and opt-in: with `BONDED_PRICE_SOURCE=binance-cli`,
+reference prices are read via `binance-cli spot ticker-price` rather than through the
+skill's own signed client. Orders are always signed in-process — the gate has to control
+the exact query string it signs and stamp a `newClientOrderId` on each order, so the
+write path never leaves the process. Reads carry no such constraint. Either source fails
+closed: an unavailable price denies the order instead of sizing it against a guess.
 
 # How it works
 
