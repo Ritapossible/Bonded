@@ -45,8 +45,9 @@ Repository: <https://github.com/Ritapossible/Bonded>
 
 ## Setup
 
-Node **22.13+** — `@binance/binance-cli` pulls a dependency that requires it. Binance
-**Spot Testnet** keys from <https://testnet.binance.vision>.
+Node 22+. Binance **Spot Testnet** keys from <https://testnet.binance.vision>. (Node
+below 22.13 prints `EBADENGINE` warnings from a `binance-cli` dependency; they are
+harmless unless you set `BONDED_PRICE_SOURCE=binance-cli`.)
 
 ```bash
 git clone https://github.com/Ritapossible/Bonded && cd Bonded

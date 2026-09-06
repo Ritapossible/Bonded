@@ -349,8 +349,11 @@ closed: an unavailable price denies the order rather than sizing it against a gu
 
 ### Running it
 
-Node **22.13 or later** — `@binance/binance-cli` pulls a dependency that requires it, and
-22.12 installs with `EBADENGINE` warnings.
+Node **22 or later**. `npm install` prints `EBADENGINE` warnings on Node below 22.13:
+they come from `inquirer`, which `@binance/binance-cli` depends on for its interactive
+mode. They are warnings, not errors — BONDED runs fine, and the default price source does
+not touch the CLI at all. Upgrade to 22.13+ only before setting
+`BONDED_PRICE_SOURCE=binance-cli`.
 
 macOS and Linux:
 

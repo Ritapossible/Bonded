@@ -12,7 +12,7 @@ recommendations. It enforces limits and reports what it refused and why.
 
 ## Requirements
 
-- Node.js 22.13 or later
+- Node.js 22 or later (22.13+ for the binance-cli price source)
 - Binance Spot Testnet API key and secret — <https://testnet.binance.vision>
 - No system binaries, no root
 

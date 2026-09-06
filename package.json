@@ -4,7 +4,7 @@
   "description": "A mandate gate and reconciliation layer between AI agents and Binance",
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22"
   },
   "bin": {
     "bonded": "./dist/cli.js"

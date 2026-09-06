@@ -40,7 +40,7 @@ WebSocket: `wss://stream.testnet.binance.vision/ws/<listenKey>` for `executionRe
 
 # Binaries Used
 
-- **node** (>= 22.13) — the runtime. The skill runs an MCP server over stdio.
+- **node** (>= 22; >= 22.13 for the optional binance-cli price source) — the runtime. The skill runs an MCP server over stdio.
 
 No system binaries and no root. Runtime dependencies are five packages:
 `@binance/binance-cli`, `@modelcontextprotocol/sdk`, `zod`, `decimal.js`, `pino`.
