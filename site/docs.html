@@ -945,7 +945,21 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
           not name its own limits has not been examined.
         </p>
 
-        <h3>The bound rests on key custody</h3>
+        <h3>Spot only - no futures, no margin</h3>
+        <p>
+          Every endpoint BONDED calls is <code>/api/v3/*</code>. There is no <code>fapi</code>, no
+          <code>dapi</code> and no margin surface in the code. A mandate cannot express a leverage
+          cap or a position side, because BONDED has no concept of either.
+        </p>
+        <p>
+          A scope decision rather than an omission, and extending it is not a configuration change.
+          The gate's clauses are Spot-shaped - notional, lot size, tick size, open orders, realised
+          PnL from trade history. Futures needs a different clause set: leverage, liquidation
+          distance, funding, reduce-only, position side. Reconciliation would also have to account
+          for position changes that no order explains, such as a liquidation.
+        </p>
+
+        <h3>The guarantee rests on key custody</h3>
         <p>
           BONDED is not a TEE and not a ZK circuit. It holds the credential and the agent does not,
           which makes the constraint structural - but compromise the host and that constraint is

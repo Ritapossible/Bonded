@@ -139,7 +139,23 @@ Every one of these is a real weakness. They are here rather than buried because 
 design that does not name its own limits has not been examined, and because each is
 something a careful reader would find in ten minutes anyway.
 
-### The bound rests on key custody
+### Spot only — no futures, no margin
+
+Every endpoint BONDED calls is `/api/v3/*`. There is no `fapi`, no `dapi`, and no margin
+surface anywhere in the code. A mandate cannot express a leverage cap or a position side
+because BONDED has no concept of either.
+
+This is a scope decision, not an omission, and extending it is not a configuration
+change. The gate's clauses are Spot-shaped — notional, lot size, tick size, open orders,
+realised PnL from trade history. Futures needs a different clause set: leverage,
+liquidation distance, funding, reduce-only, position side. Reconciliation would also have
+to account for position changes that no order explains, such as a liquidation.
+
+It is also the right venue for this particular demonstration. The demo deliberately
+places an order that defeats a safety control; doing that on a leveraged position adds
+risk that teaches the viewer nothing about the mechanism.
+
+### The guarantee rests on key custody
 
 BONDED is **not a TEE and not a ZK circuit**. It holds the Binance credential and the agent
 does not, which is what makes the constraint structural rather than advisory — but compromise the
