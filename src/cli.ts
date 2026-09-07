@@ -19,6 +19,7 @@ import { readFile } from "node:fs/promises";
 import { DecisionLog } from "./audit/decision-log.js";
 import { BinanceClient } from "./binance/client.js";
 import { BinanceCliPriceSource } from "./binance/cli-price-source.js";
+import { formatBuildIdentity, readBuildIdentity } from "./boot/build-identity.js";
 import { anyGuardFailed, formatGuardBanner, runBootGuards } from "./boot/guards.js";
 import { loadDotenv } from "./config/dotenv.js";
 import { describeConfig, loadConfig } from "./config/env.js";
@@ -132,6 +133,20 @@ async function main(): Promise<number> {
     nowMs: systemClock.now(),
   });
   emit(formatGuardBanner(guards));
+
+  // Which build this actually is. `dist/` is gitignored, so a pull without a build runs
+  // the old code and prints the old banner — indistinguishable from a fix that did not
+  // work, unless the banner says so itself.
+  const build = await readBuildIdentity({ version: VERSION, entryUrl: import.meta.url });
+  emit(formatBuildIdentity(build, Math.max(...guards.map((g) => g.name.length))));
+  logger.info(
+    {
+      version: build.version,
+      ...(build.builtAtMs === undefined ? {} : { builtAtMs: build.builtAtMs }),
+      stale: build.stale,
+    },
+    "running build",
+  );
 
   if (anyGuardFailed(guards) || mandate === undefined) {
     logger.error("boot guards failed; refusing to start");

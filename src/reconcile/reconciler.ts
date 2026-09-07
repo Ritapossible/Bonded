@@ -189,6 +189,10 @@ export class Reconciler {
         orderId: order.orderId,
         clientOrderId: order.clientOrderId,
         source: order.source,
+        // When the exchange says this order happened. A finding's age is the first
+        // thing you need when deciding whether a burn is live activity or replayed
+        // history, and it used to be the one field the line did not carry.
+        observedAtMs: order.observedAtMs,
         uncertainty: finding.uncertainty,
       },
       finding.explanation,
