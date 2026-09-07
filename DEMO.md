@@ -17,13 +17,14 @@ cp .env.example .env          # fill in the two testnet keys
 openssl rand -hex 32          # -> BONDED_HMAC_SECRET in .env
 ```
 
-Add two more lines to `.env`. Binance removed the listen-key endpoints in February 2026,
+Add three more lines to `.env`. Binance removed the listen-key endpoints in February 2026,
 so the account-wide stream answers 410 and BONDED refuses to start until it is told that
 symbol-scoped polling is acceptable:
 
 ```
 BONDED_ALLOW_PARTIAL_AUDIT=1
 BONDED_POLL_INTERVAL_MS=5000
+BONDED_LOOKBACK_MS=60000
 ```
 
 Five seconds keeps bypass detection inside one unbroken shot. The bypass targets a
@@ -33,6 +34,13 @@ not be seen at all, which is exactly what the banner's WARN is telling you.
 Do not go much lower. A poll no longer retries internally, so a pass is bounded, but a
 very short interval still means more requests into a testnet that is not always
 obliging — and a pass that never lands is a pass that cannot detect anything.
+
+`BONDED_LOOKBACK_MS` is the one that decides whether you can record at all. It defaults to
+24 hours, which is right for an operator restarting a real instance and wrong for a fresh
+log on an account you have been testing against all day: BONDED replays a day of orders it
+holds no records for, classifies them FORGED, FOREIGN or UNKNOWN_AUTHENTIC, and burns the
+bond before you press record. Sixty seconds says "start observing now", which is what a
+take needs.
 
 Testnet keys come from <https://testnet.binance.vision> (log in with GitHub). The account is
 funded automatically; there is nothing to deposit and no money at risk.
@@ -161,6 +169,7 @@ Then go back to the agent and ask for anything at all. It is refused with `scope
 | Bypass order rejected for `LOT_SIZE` | Quantity below the symbol's step size | Raise it: `node scripts/bypass-order.mjs BTCUSDT BUY 0.002` |
 | Console shows nothing after the bypass | The stream is gone (410 since Feb 2026), so polling is the only source | Confirm `BONDED_ALLOW_PARTIAL_AUDIT=1` is set and lower `BONDED_POLL_INTERVAL_MS`. Detection lands within one poll interval |
 | Everything is refused before you start | The bond is already burned from a previous take | Reset between takes (below) |
+| Console reads BURNED at startup, citing an old order id | A fresh log on an account with a day of test orders behind it | Set `BONDED_LOOKBACK_MS=60000` so the run starts observing from now |
 | The bond burned while you were setting up | `npm run redteam` was run with this instance live | Expected: the red team places a real order on the same account. Stop the recording instance before running it, then reset |
 
 ## Resetting between takes
@@ -175,3 +184,13 @@ npm start
 
 The decision log is the audit trail. Deleting it is fine on testnet while rehearsing and
 would be tampering anywhere else.
+
+**A clean log is not a clean account.** Every order from every earlier take is still in
+Binance's history, and a fresh BONDED holds no record of any of them. With the default
+24-hour lookback it finds them all and burns instantly — the console reads BURNED before
+the take begins, citing an order id from an hour ago. That is the reconciler being right,
+not a fault, but it makes recording impossible.
+
+So `BONDED_LOOKBACK_MS=60000` is not optional on a rehearsed account; it is what makes each
+take start from now. If the console reads BURNED at startup and cites an order you
+recognise from an earlier run, that variable is unset or too large.
