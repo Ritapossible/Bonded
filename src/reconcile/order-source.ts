@@ -112,7 +112,12 @@ export interface PollingOrderSourceOptions {
   readonly logger: Logger;
   readonly symbols: readonly string[];
   readonly intervalMs?: number;
-  /** How far back the first poll reaches, to catch orders placed while BONDED was down. */
+  /**
+   * How far back this source looks, to catch orders placed while BONDED was down.
+   *
+   * Enforced locally as well as requested from the exchange — see `poll()`. An order
+   * older than this is not reported, whatever `allOrders` chooses to return.
+   */
   readonly lookbackMs?: number;
 }
 
@@ -131,6 +136,16 @@ export class PollingOrderSource implements OrderSource {
   #timer: NodeJS.Timeout | undefined;
   #running = false;
   #lastHealthyAtMs: number | undefined;
+  /**
+   * The oldest an order may be and still count as something this instance observed.
+   *
+   * Fixed at `start()` rather than recomputed per poll, so the window is the one the
+   * operator configured for this run and does not slide out from under an order while
+   * a pass is in flight.
+   */
+  #windowStartMs: number | undefined;
+  /** Whether a pre-window response has already been reported, so it is said once. */
+  #reportedPreWindow = false;
   /** Per-symbol high-water mark, so each poll only asks for what it has not seen. */
   readonly #since = new Map<string, number>();
 
@@ -168,6 +183,7 @@ export class PollingOrderSource implements OrderSource {
     this.#running = true;
 
     const start = this.#clock.now() - this.#lookbackMs;
+    this.#windowStartMs = start;
     for (const symbol of this.#symbols) {
       this.#since.set(symbol, start);
     }
@@ -181,15 +197,37 @@ export class PollingOrderSource implements OrderSource {
   }
 
   /**
+   * The oldest an order may be and still be treated as observed activity.
+   *
+   * `poll()` is callable without `start()` (the health tests drive it directly), so this
+   * falls back to a window measured from now rather than assuming `start()` ran.
+   */
+  #windowStart(): number {
+    return this.#windowStartMs ?? this.#clock.now() - this.#lookbackMs;
+  }
+
+  /**
    * One polling pass.
    *
    * Errors are logged rather than thrown: a transient failure must not kill the audit
    * loop. Health is not updated on failure, so a sustained outage surfaces through
    * `healthy` going false instead of through silence.
+   *
+   * The `startTime` sent to Binance is a request, not a guarantee. `GET /api/v3/allOrders`
+   * does not document which timestamp its `startTime` filters on, and a fresh instance
+   * configured with `BONDED_LOOKBACK_MS=60000` was handed orders roughly forty minutes
+   * old — which, against an empty decision log, classified as findings and burned the
+   * bond before the operator had placed anything. The window is therefore enforced here
+   * as well: whatever the exchange chooses to return, only orders inside the configured
+   * window are treated as activity this instance is accountable for.
+   *
+   * An order carrying no usable timestamp is kept, not dropped. Being unable to date an
+   * order is a reason to look at it, not a reason to look away.
    */
   async poll(onOrders: OrderHandler): Promise<void> {
     const collected: ObservedOrder[] = [];
     let anySucceeded = false;
+    const windowStart = this.#windowStart();
 
     for (const symbol of this.#symbols) {
       const since = this.#since.get(symbol) ?? this.#clock.now() - this.#lookbackMs;
@@ -204,16 +242,63 @@ export class PollingOrderSource implements OrderSource {
         continue;
       }
       anySucceeded = true;
-      collected.push(...parsed.value);
+
+      const inWindow = parsed.value.filter(
+        (order) => order.observedAtMs === 0 || order.observedAtMs >= windowStart,
+      );
+      if (inWindow.length !== parsed.value.length) {
+        this.#reportPreWindow(symbol, since, parsed.value.length - inWindow.length, parsed.value);
+      }
+      collected.push(...inWindow);
 
       // Advance the watermark to the newest event seen, minus a small overlap so an
-      // order landing on the boundary is not skipped between polls.
+      // order landing on the boundary is not skipped between polls. Computed over the
+      // whole response, including rows the window rejected: the watermark exists to keep
+      // the next request small, and a row we declined to act on was still returned.
       const newest = parsed.value.reduce((max, order) => Math.max(max, order.observedAtMs), 0);
       if (newest > 0) this.#since.set(symbol, newest - 1_000);
     }
 
     if (anySucceeded) this.#lastHealthyAtMs = this.#clock.now();
     if (collected.length > 0) onOrders(collected);
+  }
+
+  /**
+   * Report that the exchange returned orders from before the window that was asked for.
+   *
+   * Loud once, quiet after. This is a standing property of the endpoint rather than an
+   * incident, and repeating it every poll interval would bury the lines that do mean
+   * something new — the same reason the removed user-data-stream endpoint is reported
+   * once and not retried.
+   */
+  #reportPreWindow(
+    symbol: string,
+    requestedStartTime: number,
+    dropped: number,
+    orders: readonly ObservedOrder[],
+  ): void {
+    const dated = orders.filter((order) => order.observedAtMs > 0);
+    const oldestMs =
+      dated.length === 0
+        ? undefined
+        : dated.reduce((min, order) => Math.min(min, order.observedAtMs), Number.POSITIVE_INFINITY);
+    const details = {
+      symbol,
+      dropped,
+      requestedStartTime,
+      windowStartMs: this.#windowStart(),
+      ...(oldestMs === undefined ? {} : { oldestObservedAtMs: oldestMs }),
+    };
+    if (this.#reportedPreWindow) {
+      this.#logger.debug(details, "ignored orders from before the configured lookback window");
+      return;
+    }
+    this.#reportedPreWindow = true;
+    this.#logger.warn(
+      details,
+      "allOrders returned orders older than the requested startTime; " +
+        "enforcing BONDED_LOOKBACK_MS locally and ignoring them",
+    );
   }
 
   #logFailure(symbol: string, error: BondedError): void {
