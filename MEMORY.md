@@ -299,6 +299,44 @@ the control flow is not verified.** C1 shipped because the reasoning was sound a
 code was never run. Both audits ended with a defect found by execution that reading had
 missed.
 
+## 3g. The startup burn (2026-09-07)
+
+The last defect before recording, and the most instructive one, because most of the time
+spent on it was spent on the wrong thing.
+
+**Symptom.** A fresh instance with an empty decision log read `BURNED` at startup, citing
+thirteen orders roughly forty minutes old. Reproducible, every run, for hours.
+
+**Actual cause.** A misspelled `BONDED_LOOCKBACK_MS` in the operator's local `.env`. The
+name was never read, the twenty-four hour default applied, and the account's real history
+replayed against a log with no records for it — where every row is legitimately a finding.
+BONDED was behaving exactly as designed on the configuration it actually had.
+
+**Why it took so long.** The misconfiguration was invisible from both sides. The operator
+saw a variable they had set; BONDED saw a variable that did not exist and said nothing.
+Nothing in the output was wrong, which is worse than an error — there was no thread to
+pull. Found by an agent reading the `.env` file itself rather than the config the process
+reported.
+
+| Fix | What it does |
+| --- | --- |
+| `config/env.ts` — `unrecognisedSettings` | Names every `BONDED_*` variable that is set but not read, with a "did you mean" from edit distance. Scoped to our own namespace; `BINANCE_*` is shared with the exchange's tooling. Warn, not fail — intent was lost, not safety |
+| `boot/build-identity.ts` | The banner says which build is running and warns when `dist/` is older than `src/`. `dist/` is gitignored, so a pull without a build runs the old code and prints the old banner — indistinguishable from a fix that failed |
+| `reconcile/order-source.ts` | The lookback window is enforced locally, not merely requested from the exchange |
+
+**The lesson, and it is a correction of my own reasoning.** From one screenshot I concluded
+the exchange was ignoring `startTime`, wrote a fix, and wrote a code comment stating that
+as fact. The fix is defensible on its own terms — a source that outsources its window
+cannot state what it covers — but the *claim* was never verified and did not hold. §3f
+already records that a fix verified by reading is not verified. This is the mirror image:
+**a cause inferred from a symptom is not a cause.** The premise came from reading a value
+off a screenshot; the one thing nobody read was the file the value was supposed to be in.
+
+Related: §7's "never claim a check that was not performed" applies to source comments, not
+only to log lines and the README. The comments in `order-source.ts` were corrected to say
+what is actually known.
+
+
 ## 4. Dead ends — do not re-litigate
 
 | Idea | Why it was dropped |
@@ -320,7 +358,7 @@ missed.
 | 2 | What is `BINANCE_API_ENV=demo`? | Possibly a better demo surface | Open — undocumented |
 | 3 | Do user data streams work on Spot Testnet? | The reconciler | **Superseded by 7.** The listen-key route to them is removed; the `listenToken` route is untried |
 | 4 | `binance-cli` subprocess vs direct REST? | Implementation shape | **Re-decided — both, split by direction.** Direct REST for *writes*, for the original reason: the gate must control the exact query string it signs and stamp `newClientOrderId` per order. That reasoning never applied to *reads*, and deciding it once for the whole client quietly reinstated the sponsor-alignment risk the dead-ends table warns about. `@binance/binance-cli` is now a dependency and backs the reference-price read under `BONDED_PRICE_SOURCE=binance-cli` |
-| 6 | Live testnet round trip | The demo | **Blocked in the cloud sandbox** (geo-block, §2). Must be run locally |
+| 6 | Live testnet round trip | The demo | **Resolved — done, 2026-09-07.** Run locally against Spot Testnet: boot guards pass, console reads CLEARED, orders reconcile. Never possible from the cloud sandbox (geo-block, §2), which is why it took until the last day |
 | 8 | Will the hub accept a skill that is not a Binance-operated service? | Distribution | Open — every current skill is first-party. Worth opening the PR regardless; a rejection costs nothing and the repo link stands on its own |
 | 7 | Does the listen-key flow work on Spot Testnet with HMAC keys? | Real-time detection | **Resolved — NO.** Run on a real machine 2026-09-06: `POST /api/v3/userDataStream` returns **410 Gone**. Binance removed the listen-key REST endpoints in Feb 2026. Replacement is `POST /sapi/v1/userListenToken` + `userDataStream.subscribe.listenToken`, not implemented. Run with `BONDED_ALLOW_PARTIAL_AUDIT=1` and a short `BONDED_POLL_INTERVAL_MS` until it is |
 | 5 | What is already published on Binance Skills Hub's listing UI? | Competitive picture | **Unresolved** — `binance.com/en/skills` could not be loaded through this sandbox's proxy on three attempts. **Check manually** |

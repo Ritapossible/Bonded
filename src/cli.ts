@@ -22,7 +22,12 @@ import { BinanceCliPriceSource } from "./binance/cli-price-source.js";
 import { formatBuildIdentity, readBuildIdentity } from "./boot/build-identity.js";
 import { anyGuardFailed, formatGuardBanner, runBootGuards } from "./boot/guards.js";
 import { loadDotenv } from "./config/dotenv.js";
-import { describeConfig, loadConfig } from "./config/env.js";
+import {
+  describeConfig,
+  formatUnrecognisedSetting,
+  loadConfig,
+  unrecognisedSettings,
+} from "./config/env.js";
 import { systemClock } from "./core/clock.js";
 import { describeUnknownError } from "./core/errors.js";
 import { err, ok, type Result } from "./core/result.js";
@@ -137,8 +142,9 @@ async function main(): Promise<number> {
   // Which build this actually is. `dist/` is gitignored, so a pull without a build runs
   // the old code and prints the old banner — indistinguishable from a fix that did not
   // work, unless the banner says so itself.
+  const bannerWidth = Math.max(...guards.map((g) => g.name.length));
   const build = await readBuildIdentity({ version: VERSION, entryUrl: import.meta.url });
-  emit(formatBuildIdentity(build, Math.max(...guards.map((g) => g.name.length))));
+  emit(formatBuildIdentity(build, bannerWidth));
   logger.info(
     {
       version: build.version,
@@ -147,6 +153,19 @@ async function main(): Promise<number> {
     },
     "running build",
   );
+
+  // A setting that is present but unread is worse than one that is absent: the operator
+  // believes it took effect and the default quietly applies instead. Say so by name.
+  for (const setting of unrecognisedSettings()) {
+    emit(formatUnrecognisedSetting(setting, bannerWidth));
+    logger.warn(
+      {
+        name: setting.name,
+        ...(setting.suggestion === undefined ? {} : { suggestion: setting.suggestion }),
+      },
+      "ignoring an unrecognised BONDED setting",
+    );
+  }
 
   if (anyGuardFailed(guards) || mandate === undefined) {
     logger.error("boot guards failed; refusing to start");

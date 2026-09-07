@@ -213,13 +213,20 @@ export class PollingOrderSource implements OrderSource {
    * loop. Health is not updated on failure, so a sustained outage surfaces through
    * `healthy` going false instead of through silence.
    *
-   * The `startTime` sent to Binance is a request, not a guarantee. `GET /api/v3/allOrders`
-   * does not document which timestamp its `startTime` filters on, and a fresh instance
-   * configured with `BONDED_LOOKBACK_MS=60000` was handed orders roughly forty minutes
-   * old — which, against an empty decision log, classified as findings and burned the
-   * bond before the operator had placed anything. The window is therefore enforced here
-   * as well: whatever the exchange chooses to return, only orders inside the configured
-   * window are treated as activity this instance is accountable for.
+   * The window is enforced here, not only asked for. `startTime` is sent to keep the
+   * response small, but `GET /api/v3/allOrders` does not document which timestamp it
+   * filters on, so only orders inside the configured window are treated as activity
+   * this instance is accountable for.
+   *
+   * **On the evidence for this.** It was written while chasing a fresh instance that
+   * burned its bond at startup on forty-minute-old orders, and the first draft of this
+   * comment asserted that the exchange had ignored `startTime`. That was wrong. The real
+   * cause was a misspelled `BONDED_LOOCKBACK_MS` in the operator's `.env`: the window was
+   * never sixty seconds, it was the twenty-four hour default, and the orders were inside
+   * it. Binance's filter has never been observed misbehaving, and this code does not
+   * claim it does. What stands on its own is the invariant — the configured window is
+   * this component's to enforce, and a source that outsources it cannot state what it
+   * covers. `config/env.ts` handles the misconfiguration that actually caused the burn.
    *
    * An order carrying no usable timestamp is kept, not dropped. Being unable to date an
    * order is a reason to look at it, not a reason to look away.

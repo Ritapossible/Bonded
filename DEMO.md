@@ -170,6 +170,8 @@ Then go back to the agent and ask for anything at all. It is refused with `scope
 | Console shows nothing after the bypass | The stream is gone (410 since Feb 2026), so polling is the only source | Confirm `BONDED_ALLOW_PARTIAL_AUDIT=1` is set and lower `BONDED_POLL_INTERVAL_MS`. Detection lands within one poll interval |
 | Everything is refused before you start | The bond is already burned from a previous take | Reset between takes (below) |
 | Console reads BURNED at startup, citing an old order id | A fresh log on an account with a day of test orders behind it | Set `BONDED_LOOKBACK_MS=60000` so the run starts observing from now |
+| Still BURNED after setting `BONDED_LOOKBACK_MS` | The name is misspelled in `.env`, so it is never read and the 24-hour default applies | Read the `[WARN] settings` line in the boot banner — it names any `BONDED_*` variable that is set but ignored, and suggests the real one |
+| A fix was pulled and nothing changed | `dist/` is gitignored, so `git pull` alone changes nothing that runs | Check the `[PASS] build` line in the boot banner. `[WARN]` there means `dist/` is older than `src/`: run `npm run build` |
 | The bond burned while you were setting up | `npm run redteam` was run with this instance live | Expected: the red team places a real order on the same account. Stop the recording instance before running it, then reset |
 
 ## Resetting between takes

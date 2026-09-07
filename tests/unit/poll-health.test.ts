@@ -179,15 +179,18 @@ describe("how far back the first poll reaches", () => {
 
 describe("the lookback window is enforced locally, not just requested", () => {
   /**
-   * Found on a live run the night before recording. A fresh instance started with
-   * `BONDED_LOOKBACK_MS=60000` — confirmed applied in its own config line — still came
-   * up BURNED, citing thirteen orders placed roughly forty minutes earlier. The first
-   * pass did send `startTime = now - 60000`; the exchange returned older orders anyway.
+   * The configured window is this component's to enforce.
    *
-   * `GET /api/v3/allOrders` does not document which timestamp its `startTime` filters
-   * on, so treating the response as pre-filtered made `BONDED_LOOKBACK_MS` decorative:
-   * an operator could set any window and still have the account's whole recent history
-   * replayed against an empty decision log, where every row is a finding.
+   * These tests were written while chasing a startup burn that turned out to have a
+   * different cause — a misspelled `BONDED_LOOCKBACK_MS` meant the window was the
+   * twenty-four hour default all along, and the orders were legitimately inside it.
+   * The exchange was never observed ignoring `startTime`, and nothing here asserts
+   * that it does.
+   *
+   * They are kept because the invariant is worth holding regardless of who caused that
+   * burn: `GET /api/v3/allOrders` does not document which timestamp its `startTime`
+   * filters on, and a source that cannot enforce its own window cannot state what it
+   * covers. `startTime` is a request; this is the guarantee.
    */
   function orderAt(observedAtMs: number, orderId: number): Record<string, unknown> {
     return {

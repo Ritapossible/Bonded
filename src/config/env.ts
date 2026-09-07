@@ -156,6 +156,86 @@ export interface Config {
  * Takes the environment as a parameter rather than reading `process.env` directly so
  * that configuration is testable without mutating global state.
  */
+/**
+ * A `BONDED_*` variable that is set but means nothing.
+ *
+ * A misspelled setting is the worst kind of misconfiguration: it is *present*, so the
+ * operator believes it took effect, and it is *unread*, so the default silently applies
+ * instead. `BONDED_LOOCKBACK_MS=60000` cost a full debugging cycle on a live instance —
+ * the operator had configured a sixty-second window, BONDED was running on the
+ * twenty-four-hour default, and neither the banner nor the config line said so, because
+ * from BONDED's side nothing was wrong.
+ *
+ * That is precisely the failure this tool exists to refuse elsewhere. A guard that
+ * silently ignores what it was told is not a guard.
+ *
+ * Scoped to the `BONDED_` prefix on purpose. That namespace is entirely ours, so an
+ * unrecognised name in it is always a mistake. `BINANCE_*` is shared with the exchange's
+ * own CLI and SDKs, which set variables we have never heard of and are right to.
+ */
+export interface UnrecognisedSetting {
+  readonly name: string;
+  /** The closest real setting, when one is close enough to be worth naming. */
+  readonly suggestion: string | undefined;
+}
+
+/** Levenshtein distance, for turning "not a setting" into "did you mean". */
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const substitution = (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1);
+      const deletion = (previous[j] ?? 0) + 1;
+      const insertion = (current[j - 1] ?? 0) + 1;
+      current.push(Math.min(substitution, deletion, insertion));
+    }
+    previous = current;
+  }
+  return previous[b.length] ?? 0;
+}
+
+/** Every `BONDED_*` name the schema actually reads. */
+const KNOWN_NAMES: readonly string[] = Object.keys(EnvSchema.shape);
+const KNOWN_BONDED_NAMES: readonly string[] = KNOWN_NAMES.filter((name) =>
+  name.startsWith("BONDED_"),
+);
+
+/**
+ * Every `BONDED_*` variable that is set but not read.
+ *
+ * Reported by the caller rather than thrown here: an unknown setting means the operator's
+ * intent was lost, not that the process is unsafe to run, and refusing to boot over a
+ * stray variable would be a worse failure than the one it prevents.
+ */
+export function unrecognisedSettings(
+  source: NodeJS.ProcessEnv = process.env,
+): UnrecognisedSetting[] {
+  const known = new Set(KNOWN_NAMES);
+  const found: UnrecognisedSetting[] = [];
+  for (const name of Object.keys(source)) {
+    if (!name.startsWith("BONDED_") || known.has(name)) continue;
+    let best: string | undefined;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const candidate of KNOWN_BONDED_NAMES) {
+      const distance = editDistance(name, candidate);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = candidate;
+      }
+    }
+    // Far enough away and a guess is noise, not help.
+    found.push({ name, suggestion: bestDistance <= 3 ? best : undefined });
+  }
+  return found.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** One banner line per ignored setting, in the same shape as the boot guards. */
+export function formatUnrecognisedSetting(setting: UnrecognisedSetting, width: number): string {
+  const hint = setting.suggestion === undefined ? "" : ` Did you mean ${setting.suggestion}?`;
+  return `  [WARN] ${"settings".padEnd(width)}  ${setting.name} is set but is not a BONDED setting, so it was ignored.${hint}`;
+}
+
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): Result<Config, BondedError> {
   const parsed = EnvSchema.safeParse(source);
   if (!parsed.success) {
