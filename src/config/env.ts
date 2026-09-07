@@ -206,6 +206,11 @@ export function describeConfig(config: Config): Record<string, unknown> {
     allowProd: config.allowProd,
     allowPartialAudit: config.allowPartialAudit,
     watchSymbols: config.watchSymbols,
+    // Logged because it decides what a fresh instance inherits. Left out, an operator
+    // who sets it and still sees the bond burn at startup has no way to tell whether
+    // the value reached the process or their edit never landed.
+    pollIntervalMs: config.pollIntervalMs,
+    lookbackMs: config.lookbackMs,
     priceSource: config.priceSource,
     mandatePath: config.mandatePath,
     decisionLogPath: config.decisionLogPath,
