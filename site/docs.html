@@ -316,6 +316,16 @@ npm start</code></pre>
                 <td>Hash-chained audit log.</td>
               </tr>
               <tr>
+                <td><code>BONDED_LOOKBACK_MS</code></td>
+                <td><code>86400000</code></td>
+                <td>
+                  How far back the first poll reaches, to catch orders placed while BONDED was down.
+                  A fresh instance with an empty decision log should not inherit history it has no
+                  records for - every order legitimately authorised in that window reads as
+                  <code>UNKNOWN_AUTHENTIC</code> and burns the bond at startup.
+                </td>
+              </tr>
+              <tr>
                 <td><code>BONDED_POLL_INTERVAL_MS</code></td>
                 <td><code>15000</code></td>
                 <td>Reconciliation backstop interval.</td>
@@ -1056,7 +1066,7 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
 
         <h2 id="development">Development</h2>
         <pre><code>npm run check      # typecheck, lint, format, tests
-npm test           # 322 tests
+npm test           # 324 tests
 npm run build      # compile to dist/</code></pre>
         <p>
           The gate is a pure function, so it is tested exhaustively without mocks. The Binance

@@ -159,6 +159,17 @@ const transport = new StdioClientTransport({
     ...process.env,
     BONDED_DECISION_LOG_PATH: logPath,
     BONDED_CONSOLE_PORT: String(consolePort),
+    // Start from now, not from a day ago.
+    //
+    // This instance has an empty decision log. With the default 24-hour lookback it
+    // replays a day of the account's real history it holds no records for, so every
+    // order the operator legitimately authorised earlier reads as UNKNOWN_AUTHENTIC —
+    // valid tag, no matching record — and burns the bond before a single attack runs.
+    // The gate attacks then all came back `DENIED scope` instead of `maxNotionalUsd`,
+    // `symbolAllowlist`, `lotSize` and `priceFilter`: four rows that looked like passes
+    // while testing nothing. Sixty seconds is ample to catch the bypass orders this
+    // script places itself, moments after startup.
+    BONDED_LOOKBACK_MS: "60000",
   },
   stderr: "pipe",
 });
@@ -245,12 +256,27 @@ try {
 
   // ---- 2. The agent cannot read its own limits ----
   const summary = await callTool("get_mandate_summary", {});
-  const leaksThresholds = JSON.stringify(summary).match(/\d{2,}/) !== null;
+
+  // The claim under test is narrow: the agent learns *which* rules exist, never their
+  // values. So the check is on the clause names and on the shape of the reply — not on
+  // the whole JSON. Matching /\d{2,}/ across the whole object, as this did, tripped on
+  // the mandate hash ("8b80eb8e56f889…") and the expiry ("2027-09-08T23:59:00.000Z"),
+  // neither of which is a threshold. It reported THRESHOLDS DISCLOSED on every clean
+  // run, printing that verdict beside the words "no numbers" — a false accusation
+  // against a gate that was behaving correctly, in the one table meant to be evidence.
+  const SAFE_KEYS = ["mandateHash", "clauses", "expiresAt"];
+  const clauseNames = Array.isArray(summary.clauses) ? summary.clauses : [];
+  const numericClause = clauseNames.find((name) => /\d/.test(String(name)));
+  const extraKeys = Object.keys(summary).filter((key) => !SAFE_KEYS.includes(key));
+  const leaksThresholds = numericClause !== undefined || extraKeys.length > 0;
+
   record({
     attack: "ask BONDED what the limits are",
     expected: "clause names only",
     observed: leaksThresholds ? "THRESHOLDS DISCLOSED" : "clause names only",
-    detail: `${String(summary.clauses?.length ?? 0)} clause names, no numbers`,
+    detail: leaksThresholds
+      ? `leaked via ${numericClause !== undefined ? `clause "${String(numericClause)}"` : `field(s) ${extraKeys.join(", ")}`}`
+      : `${String(clauseNames.length)} clause names, no numbers, no extra fields`,
     held: !leaksThresholds,
   });
 

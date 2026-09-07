@@ -61,6 +61,21 @@ const EnvSchema = z.object({
     .startsWith("wss://")
     .default("wss://stream.testnet.binance.vision/ws"),
   BONDED_POLL_INTERVAL_MS: z.coerce.number().int().min(1_000).max(300_000).default(15_000),
+  /**
+   * How far back the first poll reaches, to catch orders placed while BONDED was down.
+   *
+   * Twenty-four hours is right for an operator restarting a real instance. It is wrong
+   * for a fresh instance with an empty decision log: it inherits a day of history it has
+   * no records for, and every legitimately-authorised order in that window classifies as
+   * UNKNOWN_AUTHENTIC — a valid tag with no matching record — which burns the bond
+   * before the instance has done anything. The red team hit exactly that.
+   */
+  BONDED_LOOKBACK_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 60 * 60 * 1_000)
+    .default(24 * 60 * 60 * 1_000),
   BONDED_ALLOW_PROD: z.enum(["0", "1"]).default("0"),
   /**
    * Permit trading when only symbol-scoped observation is live.
@@ -130,6 +145,8 @@ export interface Config {
   readonly decisionLogPath: string;
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly pollIntervalMs: number;
+  /** How far back the first poll reaches. */
+  readonly lookbackMs: number;
   readonly consolePort: number;
 }
 
@@ -175,6 +192,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Result<Conf
     decisionLogPath: env.BONDED_DECISION_LOG_PATH,
     logLevel: env.BONDED_LOG_LEVEL,
     pollIntervalMs: env.BONDED_POLL_INTERVAL_MS,
+    lookbackMs: env.BONDED_LOOKBACK_MS,
     consolePort: env.BONDED_CONSOLE_PORT,
   });
 }

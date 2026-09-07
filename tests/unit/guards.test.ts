@@ -51,6 +51,7 @@ function config(overrides: Partial<Config["binance"]> = {}, allowProd = false): 
     mandatePath: "/tmp/does-not-exist/mandate.json",
     decisionLogPath: "/tmp/does-not-exist/decisions.jsonl",
     logLevel: "error",
+    lookbackMs: 86_400_000,
     pollIntervalMs: 15_000,
     consolePort: 0,
   };

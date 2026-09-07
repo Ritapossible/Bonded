@@ -116,3 +116,63 @@ describe("how long a source may go quiet before it counts as stalled", () => {
     expect(source(3_000, fakeClock(), recordingClient()).healthy).toBe(false);
   });
 });
+
+describe("how far back the first poll reaches", () => {
+  /**
+   * A fresh instance with an empty decision log inherits whatever window it is given.
+   * At the 24-hour default it replays a day of the account's real history it holds no
+   * records for, so every order the operator legitimately authorised in that window
+   * classifies as UNKNOWN_AUTHENTIC — a valid tag with no matching record — and burns
+   * the bond before the instance has done anything.
+   *
+   * The red team hit exactly that: all four gate attacks came back `DENIED scope`
+   * rather than `maxNotionalUsd`, `symbolAllowlist`, `lotSize` and `priceFilter`. Four
+   * rows that read as passes while testing nothing at all.
+   */
+  it("honours the configured lookback for the first pass", async () => {
+    const clock = fakeClock();
+    const seen: (number | undefined)[] = [];
+    const client = {
+      allOrders: (_symbol: string, options: { startTime?: number } = {}) => {
+        seen.push(options.startTime);
+        return Promise.resolve(ok([]));
+      },
+    } as unknown as BinanceClient;
+
+    const poll = new PollingOrderSource({
+      client,
+      clock,
+      logger: createSilentLogger(),
+      symbols: ["BTCUSDT"],
+      intervalMs: 5_000,
+      lookbackMs: 60_000,
+    });
+    await poll.start(() => undefined);
+    await poll.stop();
+
+    expect(seen[0]).toBe(clock.now() - 60_000);
+  });
+
+  it("defaults to a day, which is right for an operator restarting a real instance", async () => {
+    const clock = fakeClock();
+    const seen: (number | undefined)[] = [];
+    const client = {
+      allOrders: (_symbol: string, options: { startTime?: number } = {}) => {
+        seen.push(options.startTime);
+        return Promise.resolve(ok([]));
+      },
+    } as unknown as BinanceClient;
+
+    const poll = new PollingOrderSource({
+      client,
+      clock,
+      logger: createSilentLogger(),
+      symbols: ["BTCUSDT"],
+      intervalMs: 5_000,
+    });
+    await poll.start(() => undefined);
+    await poll.stop();
+
+    expect(seen[0]).toBe(clock.now() - 24 * 60 * 60 * 1000);
+  });
+});

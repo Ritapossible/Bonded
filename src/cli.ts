@@ -250,6 +250,7 @@ async function main(): Promise<number> {
     // symbol, so every pair not listed here is outside the poller's reach.
     symbols: pollSymbols,
     intervalMs: config.value.pollIntervalMs,
+    lookbackMs: config.value.lookbackMs,
   });
   sources.push(poller);
   await poller.start((orders) => {
