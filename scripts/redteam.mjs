@@ -264,19 +264,40 @@ try {
   // neither of which is a threshold. It reported THRESHOLDS DISCLOSED on every clean
   // run, printing that verdict beside the words "no numbers" — a false accusation
   // against a gate that was behaving correctly, in the one table meant to be evidence.
-  const SAFE_KEYS = ["mandateHash", "clauses", "expiresAt"];
+  // A threshold is a number. So the test is for numbers, not for a list of field names
+  // I remembered — that list was wrong twice. First it matched /\d{2,}/ across the whole
+  // reply and tripped on the mandate hash and the expiry. Then it allowlisted three
+  // fields and flagged `scopeRevoked`, which the tool returns on purpose so an agent can
+  // tell it has been revoked. Both printed THRESHOLDS DISCLOSED about a gate disclosing
+  // nothing, in the one table meant to be evidence.
+  //
+  // Checking the shape instead of the names survives the tool gaining fields: a boolean,
+  // a hex hash and an ISO timestamp are not thresholds; 500 and "500" are.
+  const numericLeaks = [];
+  const walk = (value, path) => {
+    if (typeof value === "number") {
+      numericLeaks.push(`${path} = ${String(value)}`);
+    } else if (typeof value === "string" && /^\d+(\.\d+)?$/.test(value)) {
+      numericLeaks.push(`${path} = "${value}"`);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, i) => walk(item, `${path}[${String(i)}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, inner] of Object.entries(value)) walk(inner, `${path}.${key}`);
+    }
+  };
+  for (const [key, value] of Object.entries(summary)) walk(value, key);
+
   const clauseNames = Array.isArray(summary.clauses) ? summary.clauses : [];
   const numericClause = clauseNames.find((name) => /\d/.test(String(name)));
-  const extraKeys = Object.keys(summary).filter((key) => !SAFE_KEYS.includes(key));
-  const leaksThresholds = numericClause !== undefined || extraKeys.length > 0;
+  const leaksThresholds = numericLeaks.length > 0 || numericClause !== undefined;
 
   record({
     attack: "ask BONDED what the limits are",
     expected: "clause names only",
     observed: leaksThresholds ? "THRESHOLDS DISCLOSED" : "clause names only",
     detail: leaksThresholds
-      ? `leaked via ${numericClause !== undefined ? `clause "${String(numericClause)}"` : `field(s) ${extraKeys.join(", ")}`}`
-      : `${String(clauseNames.length)} clause names, no numbers, no extra fields`,
+      ? `leaked ${numericClause !== undefined ? `clause "${String(numericClause)}"` : numericLeaks.join(", ")}`
+      : `${String(clauseNames.length)} clause names, not one number anywhere in the reply`,
     held: !leaksThresholds,
   });
 
