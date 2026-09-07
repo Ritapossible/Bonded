@@ -115,7 +115,7 @@ the decision log's head hash so a third party can verify it with
 | Owner console — one screen, live over SSE | done |
 | Public API entry point, CI, process-level failure handling | done |
 
-324 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+338 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
 
 ### The console
 
@@ -569,7 +569,7 @@ system** — run `node scripts/console-preview.mjs`. The real demo is
 
 ```bash
 npm run check      # typecheck + lint + tests
-npm test           # 324 tests, ~2s
+npm test           # 338 tests, ~2s
 ```
 
 ## Licence
