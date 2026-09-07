@@ -611,33 +611,6 @@ h2 {
 
 /* ---------------------------------------------------------------- limits */
 
-.limits {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 52px;
-}
-
-.limit {
-  padding: 26px;
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--down);
-  border-radius: 10px;
-  background: var(--surface);
-}
-
-.limit h3 {
-  margin: 0 0 10px;
-  font-size: 1.02rem;
-  font-weight: 650;
-}
-
-.limit p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.93rem;
-}
-
 /*
  * Inline code on the landing page.
  *
@@ -648,7 +621,7 @@ h2 {
  */
 .path code,
 .step code,
-.limit code {
+.road code {
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--surface-2);
@@ -991,7 +964,6 @@ h2 {
 /* Tablet: two-column grids collapse, the inline nav gives way to the menu. */
 @media (max-width: 900px) {
   .paths,
-  .limits,
   .brief__grid {
     grid-template-columns: 1fr;
   }
@@ -1167,16 +1139,7 @@ h2 {
   }
 
   .paths,
-  .limits {
-    gap: 14px;
-    margin-top: 30px;
-  }
-
   .path,
-  .limit {
-    padding: 22px 20px;
-  }
-
   .steps {
     margin-top: 30px;
   }
@@ -1195,7 +1158,7 @@ h2 {
 
   .step p,
   .path li,
-  .limit p,
+  .road p,
   .outcome p {
     font-size: 0.95rem;
     line-height: 1.55;
