@@ -54,10 +54,10 @@ the agent's level — both servers registered side by side — rather than calli
 
 1. **Holds the credential.** The agent talks to BONDED's MCP server, never to Binance. It has
    no key of its own.
-2. **Gates every order** against a mandate it cannot read — symbol allowlist, max notional,
-   leverage ceiling, drawdown, trading window. Denials are sub-millisecond and name the exact
-   clause that fired.
-3. **Reconciles what actually happened.** Binance's user data stream reports every order on
+2. **Gates every order** against a mandate it cannot read — symbol allowlist, order types,
+   sides, max notional, max open orders, daily loss limit, drawdown, trading window, expiry.
+   Denials are sub-millisecond and name the exact clause that fired.
+3. **Reconciles what actually happened.** Binance's own order history reports every order on
    the account — *including ones BONDED never authorised*. An unexplained order is a bypass:
    the bond burns and trade scope is revoked.
 
@@ -78,6 +78,61 @@ Anything but the first burns the bond and revokes trade scope. Every finding shi
 plain explanation, the verbatim evidence, a Binance order id anyone can check independently,
 and an explicit list of what could **not** be determined.
 
+## Status
+
+**The full sequence has run against live Binance Spot Testnet** — allow, refuse, bypass,
+detect, revoke — not only against a stub.
+
+From the run on 2026-09-07:
+
+| What was attempted | What BONDED did |
+| --- | --- |
+| Agent asks for 900 USD of ETH | `DENIED maxNotionalUsd`, observed 900, limit 500 |
+| Agent asks for 450 USD of ETH | `check_order` → `WOULD_ALLOW`, then `PLACED / FILLED` — order `9436212`, 0.1802 ETH for 449.909 USDT, stamped `bnd_8b80eb8e_1_6ebccfa57d02` |
+| Restart | Chain verified over 2 records; authorisation index rebuilt from the log, so BONDED's own fill was not misread as foreign |
+| Client id forged into BONDED's namespace | Filled as order `13078024`, then classified `FORGED` — bond burned |
+| Raw API order, BONDED nowhere in the path | Filled as order `13078025`, then classified `FOREIGN` — bond burned |
+| Any order after the burn | `DENIED scope` |
+
+`npm run redteam` drives eight attacks over MCP and reports **8 of 8 held**, each naming
+the clause that refused it with the value it observed. The two bypass rows print their
+Binance order ids, which are checkable independently of this project, and the run prints
+the decision log's head hash so a third party can verify it with
+`bonded verify --head`.
+
+| Component | State |
+| --- | --- |
+| Mandate compiler, content addressing, `exchangeInfo` grounding | done |
+| Pre-trade gate — 17 clauses, pure, fail-closed | done |
+| Realised PnL from trade history — the figure the loss limits bind on | done |
+| Hash-chained decision log with tamper detection | done |
+| Binance Spot REST client — signing, timeouts, bounded retries | done |
+| MCP server — `place_order`, `check_order`, `cancel_order`, `get_mandate_summary`, `get_account` | done |
+| Boot guards + startup banner | done |
+| **Reconciler — authorisation index, classification, bond burn** | **done** |
+| Order sources — polling backstop | done |
+| Order sources — user data stream | **blocked upstream**: Binance removed the listen-key endpoints (410); the `listenToken` replacement is not implemented |
+| Owner console — one screen, live over SSE | done |
+| Public API entry point, CI, process-level failure handling | done |
+
+324 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
+
+### The console
+
+![BONDED console showing a burned bond](docs/console.png)
+
+One screen at `http://127.0.0.1:7391`, pushed over SSE. The bond state is the largest
+thing on it and changes colour, so it reads on mute. `TESTNET` is permanently visible.
+
+Its security posture is deliberate and tested: **loopback only** (never `0.0.0.0` — the
+payload includes balances and order history), **read-only** (every method but `GET` is
+refused, so a compromised browser tab cannot become a trading capability), and no
+credential ever reaches the view model.
+
+One difference from the agent's view: the console **does** show the mandate's thresholds.
+The owner wrote them; hiding them would be theatre. `get_mandate_summary` still omits
+them, because an agent that can read its limits can sit exactly inside them.
+
 ## Honest limits
 
 Every one of these is a real weakness. They are here rather than buried because a security
@@ -87,8 +142,8 @@ something a careful reader would find in ten minutes anyway.
 ### The bound rests on key custody
 
 BONDED is **not a TEE and not a ZK circuit**. It holds the Binance credential and the agent
-does not, which is what makes the bound structural rather than advisory — but compromise the
-machine BONDED runs on and the bound is gone. On the ladder of enforcement mechanisms this
+does not, which is what makes the constraint structural rather than advisory — but compromise the
+machine BONDED runs on and that constraint is gone. On the ladder of enforcement mechanisms this
 is the middle rung: a signed mandate with a public trace. The rungs above it need attested
 hardware or a ZK-native chain, and neither was reachable here.
 
@@ -217,52 +272,17 @@ Positions that stay open are not counted at all — that is what "realised" mean
 
 ### What has not been exercised against a live exchange
 
-Development ran in an environment Binance geo-blocks, so signing and order placement are
-covered by tests against a stubbed exchange rather than a real one.
+Short list, and it is worth being precise about what is on it.
 
-The boot path **has** now been run against live Spot Testnet, and two things came back
-from it. The guards pass — environment, mandate, clock skew, symbol grounding against
-live `exchangeInfo`, audit path — and the clock-skew guard caught a real 113-second drift
-on the machine it ran on, before anything was signed. And the listen-key flow is **gone**:
-`POST /api/v3/userDataStream` answers 410, as described above. What remains unverified is
-an order actually reaching the matching engine and coming back through reconciliation.
+**Never run:** anything on mainnet, deliberately — see above. The `withdrawalPermission`
+guard, because `apiRestrictions` does not exist on Spot Testnet. The `dailyLossLimitUsd`
+and `maxDrawdownPct` clauses have never denied an order in anger: they are covered by
+unit and property tests, but no live run has yet lost enough money to trip them.
+Multi-day operation, and the listen-token replacement for the removed stream.
 
-## Status
-
-**The reconciler works end to end.** The full sequence — allow, refuse, bypass, detect,
-revoke — is covered by an integration test against a stubbed exchange.
-
-| Component | State |
-| --- | --- |
-| Mandate compiler, content addressing, `exchangeInfo` grounding | done |
-| Pre-trade gate — 17 clauses, pure, fail-closed | done |
-| Realised PnL from trade history — the figure the loss limits bind on | done |
-| Hash-chained decision log with tamper detection | done |
-| Binance Spot REST client — signing, timeouts, bounded retries | done |
-| MCP server — `place_order`, `check_order`, `cancel_order`, `get_mandate_summary`, `get_account` | done |
-| Boot guards + startup banner | done |
-| **Reconciler — authorisation index, classification, bond burn** | **done** |
-| Order sources — polling backstop + user data stream | done |
-| Owner console — one screen, live over SSE | done |
-| Public API entry point, CI, process-level failure handling | done |
-
-324 tests passing (unit, property, integration); typecheck, lint and format clean in CI.
-
-### The console
-
-![BONDED console showing a burned bond](docs/console.png)
-
-One screen at `http://127.0.0.1:7391`, pushed over SSE. The bond state is the largest
-thing on it and changes colour, so it reads on mute. `TESTNET` is permanently visible.
-
-Its security posture is deliberate and tested: **loopback only** (never `0.0.0.0` — the
-payload includes balances and order history), **read-only** (every method but `GET` is
-refused, so a compromised browser tab cannot become a trading capability), and no
-credential ever reaches the view model.
-
-One difference from the agent's view: the console **does** show the mandate's thresholds.
-The owner wrote them; hiding them would be theatre. `get_mandate_summary` still omits
-them, because an agent that can read its limits can sit exactly inside them.
+**Also worth stating:** testnet fills are simulated. An order that fills there tells you
+the request was well-formed and accepted, not that it would have found a counterparty on
+a real book.
 
 ## Documents
 

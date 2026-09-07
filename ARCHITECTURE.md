@@ -36,7 +36,7 @@ design skill; putting everything in one process is the default mistake.
 ```
                       ┌──────────────────────────────────────┐
    agent (Claude Code,│           CONTROL PLANE              │
-   Codex, OpenClaw)   │  mandate compiler · bond state ·     │
+   Codex, Cursor)    │  mandate compiler · bond state ·     │
         │             │  scope issuance · owner console      │
         │ MCP         └──────────────┬───────────────────────┘
         ▼                            │ mandate (content-addressed)
@@ -311,7 +311,7 @@ Aim for a test count worth putting in the README — evidence over assertion.
 
 | Artifact | Purpose |
 | --- | --- |
-| **MCP server** | Agent-facing. Framework-agnostic: Claude Code, Codex, Cursor, OpenClaw. Tools: `place_order`, `cancel_order`, `get_account`, `get_mandate_summary` — the last returns clause *names* only, never values, so the agent cannot read its own limits |
+| **MCP server** | Agent-facing. Framework-agnostic: Claude Code, Codex CLI, Claude Desktop, Cursor, Windsurf, VS Code. Tools: `place_order`, `check_order`, `cancel_order`, `get_account`, `get_mandate_summary` — the last returns clause *names* only, never values, so the agent cannot read its own limits |
 | **Owner console** | One screen: mandate clauses, bond state, live decision feed, certificate. One screen, not eight — breadth is not a claim |
 | **`SKILL.md`** | Packaged for Binance Skills Hub, plus a PR to `binance/binance-skills-hub` |
 | **README** | Threat model, enforcement table, boot-guard banner, honest limits |

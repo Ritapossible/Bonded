@@ -150,7 +150,7 @@
         <h2 id="overview">Overview</h2>
         <p>
           The agent holds no Binance credential. Its entire capability is the five MCP tools below,
-          so the bound is structural rather than advisory. Every order is evaluated against a
+          so the constraint is structural rather than advisory. Every order is evaluated against a
           mandate before it is sent, and every order that reaches the exchange is reconciled against
           what BONDED actually authorised.
         </p>
@@ -196,7 +196,9 @@
             Binance Spot Testnet API key and secret -
             <a href="https://testnet.binance.vision">testnet.binance.vision</a>
           </li>
-          <li>An MCP-capable agent: Claude Code, Codex, Cursor, OpenClaw</li>
+          <li>
+            An MCP-capable agent: Claude Code, Codex CLI, Claude Desktop, Cursor, Windsurf, VS Code
+          </li>
         </ul>
         <p>No system binaries, no root, no database. Runtime state is two files on disk.</p>
 
@@ -694,9 +696,12 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
         </ol>
 
         <p>
-          Two overlapping sources feed it: the user data stream for near-instant detection, and a
-          polling backstop that is a hard startup dependency. Seeing an order twice costs nothing;
-          seeing it zero times is the failure this exists to prevent.
+          It is designed around two overlapping sources: the account-wide user data stream for
+          near-instant detection, and a polling backstop that is a hard startup dependency. Seeing
+          an order twice costs nothing; seeing it zero times is the failure this exists to prevent.
+          Since February 2026 the stream is unavailable - Binance removed the listen-key endpoints
+          and they answer 410 - so polling is currently the only source, which is why the boot
+          banner reports coverage as DEGRADED rather than quietly carrying on.
         </p>
 
         <h2 id="audit-log">Audit log</h2>
@@ -943,7 +948,8 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
         <h3>The bound rests on key custody</h3>
         <p>
           BONDED is not a TEE and not a ZK circuit. It holds the credential and the agent does not,
-          which makes the bound structural - but compromise the host and the bound is gone.
+          which makes the constraint structural - but compromise the host and that constraint is
+          gone.
         </p>
 
         <h3>Reconciliation detects; it does not prevent</h3>
@@ -1054,13 +1060,25 @@ claude mcp add bonded -- node /absolute/path/to/Bonded/dist/cli.js</code></pre>
 
         <div class="note">
           <p>
-            <strong>What has and has not been run live.</strong> The boot path has been run against
-            Spot Testnet from a real machine: environment, mandate, clock skew, symbol grounding
-            against live <code>exchangeInfo</code>, decision-log chain and audit path all pass, the
-            console serves, and the MCP server connects. That run is also what found the removed
-            listen-key endpoint and a clock-skew guard whose symmetric limit passed a clock Binance
-            rejects. Signing and order placement remain covered by tests against a stubbed exchange
-            rather than a real one.
+            <strong>What has and has not been run live.</strong> The full sequence - allow, refuse,
+            bypass, detect, revoke - has run against Binance Spot Testnet from a real machine. An
+            agent's 900 USD order was refused by <code>maxNotionalUsd</code>; a 450 USD order
+            filled, stamped with a BONDED client id; a forged id and a raw API order both filled and
+            were then classified <code>FORGED</code> and <code>FOREIGN</code>, burning the bond;
+            every order after that was refused by <code>scope</code>.
+            <code>npm run redteam</code> reports eight of eight held.
+          </p>
+          <p>
+            Those live runs are also what found the removed listen-key endpoint, a clock-skew guard
+            whose symmetric limit passed a clock Binance rejects, and a startup lookback that made a
+            fresh instance burn its own bond on the operator's earlier orders.
+          </p>
+          <p>
+            <strong>Not run:</strong> anything on mainnet, deliberately. The
+            <code>withdrawalPermission</code> guard, which needs an endpoint testnet does not have.
+            The daily-loss and drawdown clauses, which no live run has yet lost enough to trip.
+            Multi-day operation. And testnet fills are simulated - a fill there says the request was
+            well-formed and accepted, not that it would have found a counterparty on a real book.
           </p>
         </div>
 

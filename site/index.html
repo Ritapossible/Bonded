@@ -201,10 +201,10 @@
               <div>
                 <h3>Mandate</h3>
                 <p>
-                  Symbol allowlist, max notional, leverage ceiling, loss limits, trading window,
-                  expiry. Validated, grounded against live <code>exchangeInfo</code>, then hashed -
-                  so every audit record cites one exact ruleset and the rules cannot be widened
-                  behind the trail.
+                  Symbol allowlist, order types, sides, max notional, max open orders, loss and
+                  drawdown limits, trading window, expiry. Validated, grounded against live
+                  <code>exchangeInfo</code>, then hashed - so every audit record cites one exact
+                  ruleset and the rules cannot be widened behind the trail.
                 </p>
               </div>
               <svg
@@ -368,8 +368,8 @@
                 <span>An MCP server itself, beside Binance's</span>
               </div>
               <div class="brief__item">
-                <strong>Spot REST and streams</strong>
-                <span>Signed orders, filters, execution reports</span>
+                <strong>Spot REST</strong>
+                <span>Signed orders, filters, order history</span>
               </div>
             </div>
           </div>
@@ -392,8 +392,8 @@
             <article class="limit">
               <h3>It is not a TEE</h3>
               <p>
-                The bound rests on key custody. Compromise the host and the bound is gone. Middle
-                rung, not the top one.
+                The guarantee rests on key custody. Compromise the host and it is gone. Middle rung,
+                not the top one.
               </p>
             </article>
             <article class="limit">
