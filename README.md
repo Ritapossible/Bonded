@@ -139,22 +139,6 @@ Every one of these is a real weakness. They are here rather than buried because 
 design that does not name its own limits has not been examined, and because each is
 something a careful reader would find in ten minutes anyway.
 
-### Spot only — no futures, no margin
-
-Every endpoint BONDED calls is `/api/v3/*`. There is no `fapi`, no `dapi`, and no margin
-surface anywhere in the code. A mandate cannot express a leverage cap or a position side
-because BONDED has no concept of either.
-
-This is a scope decision, not an omission, and extending it is not a configuration
-change. The gate's clauses are Spot-shaped — notional, lot size, tick size, open orders,
-realised PnL from trade history. Futures needs a different clause set: leverage,
-liquidation distance, funding, reduce-only, position side. Reconciliation would also have
-to account for position changes that no order explains, such as a liquidation.
-
-It is also the right venue for this particular demonstration. The demo deliberately
-places an order that defeats a safety control; doing that on a leveraged position adds
-risk that teaches the viewer nothing about the mechanism.
-
 ### The guarantee rests on key custody
 
 BONDED is **not a TEE and not a ZK circuit**. It holds the Binance credential and the agent
@@ -255,16 +239,15 @@ unavailable, and BONDED refuses to start unless `BONDED_ALLOW_PARTIAL_AUDIT=1` s
 symbol-scoped coverage is acceptable — which is the guard behaving exactly as designed,
 refusing to trade with less observation than it claims.
 
-The replacement is `POST /sapi/v1/userListenToken` plus
-`userDataStream.subscribe.listenToken` over the WebSocket API. It is not implemented
-here. Until it is, run with:
+Migrating to the replacement endpoint is the first item on the [roadmap](#roadmap).
+Until then, run with:
 
 ```
 BONDED_ALLOW_PARTIAL_AUDIT=1
 BONDED_POLL_INTERVAL_MS=5000
 ```
 
-Detection then comes from polling the mandate's symbols every three seconds instead of
+Detection then comes from polling the mandate's symbols every five seconds instead of
 from the stream — slower, and blind to symbols outside the mandate, which is precisely
 what the WARN on the banner says.
 
@@ -299,6 +282,48 @@ Multi-day operation, and the listen-token replacement for the removed stream.
 **Also worth stating:** testnet fills are simulated. An order that fills there tells you
 the request was well-formed and accepted, not that it would have found a counterparty on
 a real book.
+
+## Roadmap
+
+Three pieces, in the order they are worth building. Each is scoped work rather than an
+aspiration, so the reason it is not done yet is stated with it.
+
+### Next — restore real-time detection
+
+Binance removed the listen-key REST endpoints in February 2026, so the account-wide
+stream is gone and polling is currently the only order source. Migrating to
+`POST /sapi/v1/userListenToken` plus `userDataStream.subscribe.listenToken` brings
+detection back from one poll interval to near-instant, and restores coverage of symbols
+outside the mandate — which polling structurally cannot see, because `allOrders` requires
+a symbol.
+
+### Then — futures and margin
+
+Today every endpoint is `/api/v3/*`. There is no `fapi`, no `dapi` and no margin surface,
+and a mandate cannot express a leverage cap or a position side because BONDED has no
+concept of either.
+
+Extending it is not a configuration change, and the clause list is the smallest part:
+
+- **Different clauses**, not more of them — leverage, liquidation distance, funding,
+  reduce-only, position side.
+- **Drawdown binds on the wrong number.** `maxDrawdownPct` is computed from *realised*
+  PnL out of trade history. On a leveraged position the figure that matters is
+  unrealised, which means position tracking, mark price and funding.
+- **Reconciliation needs a sixth outcome.** Every Spot position change has an order
+  behind it. A liquidation moves a position with no order to match, so it fits none of
+  the five outcomes — a new category of event, not a new clause.
+
+Spot is also the right venue for the demonstration: it places an order that deliberately
+defeats a safety control, and doing that on a leveraged position adds risk that teaches a
+viewer nothing about the mechanism.
+
+### Later — move the key out of reach
+
+Signing inside an enclave or against an HSM, so compromising the host no longer
+compromises the credential. This raises the rung on the ladder rather than removing the
+ladder — trust moves to attestation instead of to the machine — but it is the difference
+between a guarantee that survives a compromised host and one that does not.
 
 ## Documents
 

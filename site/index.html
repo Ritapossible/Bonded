@@ -72,6 +72,7 @@
           <a href="#how">How it works</a>
           <a href="#reconciliation">Reconciliation</a>
           <a href="#limits">Limits</a>
+          <a href="#roadmap">Roadmap</a>
           <a href="docs.html">Docs</a>
         </nav>
         <details class="menu">
@@ -89,6 +90,7 @@
             <a href="#how">How it works</a>
             <a href="#reconciliation">Reconciliation</a>
             <a href="#limits">Limits</a>
+            <a href="#roadmap">Roadmap</a>
             <a href="docs.html">Docs</a>
           </nav>
         </details>
@@ -390,18 +392,10 @@
 
           <div class="limits">
             <article class="limit">
-              <h3>Spot only</h3>
+              <h3>It rests on key custody</h3>
               <p>
-                No futures, no margin. Every call is <code>/api/v3</code>; a mandate cannot express
-                leverage because BONDED has no concept of it. Futures needs a different clause set,
-                not a bigger one.
-              </p>
-            </article>
-            <article class="limit">
-              <h3>It is not a TEE</h3>
-              <p>
-                The guarantee rests on key custody. Compromise the host and it is gone. Middle rung,
-                not the top one.
+                The agent cannot reach the credential, but the host can. Compromise the machine
+                BONDED runs on and the guarantee goes with it.
               </p>
             </article>
             <article class="limit">
@@ -419,6 +413,52 @@
               </p>
             </article>
           </div>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------- roadmap -->
+      <section id="roadmap">
+        <div class="shell">
+          <div class="section-head">
+            <span class="eyebrow">Roadmap</span>
+            <h2>What comes next.</h2>
+            <p>
+              Three pieces, in the order they are worth building. Each is scoped work rather than an
+              aspiration, so the reason it is not done yet is stated with it.
+            </p>
+          </div>
+
+          <ol class="roadmap">
+            <li class="road">
+              <span class="road__tag">Next</span>
+              <h3>Restore real-time detection</h3>
+              <p>
+                Binance removed the listen-key endpoints in February 2026, so the account-wide
+                stream is gone and polling is the only source. Migrating to
+                <code>userListenToken</code> brings detection back from one poll interval to
+                near-instant, and restores coverage of symbols outside the mandate.
+              </p>
+            </li>
+            <li class="road">
+              <span class="road__tag">Then</span>
+              <h3>Futures and margin</h3>
+              <p>
+                Not a bigger clause set - a different one: leverage, liquidation distance, funding,
+                reduce-only, position side. Drawdown would have to bind on unrealised PnL rather
+                than realised, and reconciliation needs a sixth outcome, because a liquidation moves
+                a position with no order behind it to match.
+              </p>
+            </li>
+            <li class="road">
+              <span class="road__tag">Later</span>
+              <h3>Move the key out of reach</h3>
+              <p>
+                Signing inside an enclave or against an HSM, so compromising the host no longer
+                compromises the credential. This raises the rung on the ladder rather than removing
+                the ladder: trust moves to attestation instead of to the machine.
+              </p>
+            </li>
+          </ol>
         </div>
       </section>
     </main>
