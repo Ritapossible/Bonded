@@ -7,7 +7,7 @@ order that reaches the exchange is reconciled against what BONDED actually autho
 order it never approved is detected, attributed, and burns the bond.
 
 Built for the **Binance Agent OS Mini Hackathon**, Track A (Agent Workflows → Trading
-Workflows). Deadline **2026-09-08 23:59 UTC**.
+Workflows).
 
 ---
 
